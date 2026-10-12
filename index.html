@@ -51,6 +51,7 @@ button:focus-visible{outline:2px solid var(--tower);outline-offset:2px}
 .big.primary{background:var(--tower);border-color:var(--tower);color:var(--on-accent)}
 .big small{display:block;font-size:13px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
 .big.primary small{color:var(--on-accent);opacity:.8}
+.ver{margin:10px 0 0;text-align:right;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 
 /* top bar */
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px}
@@ -168,6 +169,7 @@ canvas{display:block}
     <button id="goEndless" class="big">Endless</button>
     <button id="goSettings" class="big">Settings</button>
     <button id="goGuide" class="big">Guide</button>
+    <p id="appVer" class="ver"></p>
   </section>
 
   <section id="scrLevels" class="screen" hidden>
@@ -706,6 +708,7 @@ const TXT = {
 };
 
 /* ================= storage ================= */
+const APP_VERSION = 'v0.6.3'; // shown at the bottom of the home screen · bump on every release
 const KEY = 'towermaze_v2';
 // stars: best stars per stage · rec: least gold spent on a 3-star win · best / bestR: endless Classic / Random waves cleared
 // seen: towers (t) and enemies (e) met, for the Guide · lang, speed, sound: settings
@@ -1442,6 +1445,7 @@ $('tabE').addEventListener('click', () => { bookTab = 'e'; buildBook(); });
 window.addEventListener('resize', () => { if (!scr.play.hidden) { layout(); draw(0); } });
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (G && !scr.play.hidden) { buildTools(); renderUI(); if (!running) draw(0); } }); } catch (e) {}
 
+$('appVer').textContent = APP_VERSION;
 applyLang();
 show('home');
 })();
