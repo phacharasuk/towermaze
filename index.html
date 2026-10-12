@@ -708,7 +708,7 @@ const TXT = {
 };
 
 /* ================= storage ================= */
-const APP_VERSION = 'v0.6.3'; // shown at the bottom of the home screen · bump on every release
+const APP_VERSION = 'v0.6.4'; // shown at the bottom of the home screen · bump on every release
 const KEY = 'towermaze_v2';
 // stars: best stars per stage · rec: least gold spent on a 3-star win · best / bestR: endless Classic / Random waves cleared
 // seen: towers (t) and enemies (e) met, for the Guide · lang, speed, sound: settings
@@ -1448,6 +1448,14 @@ try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () =
 $('appVer').textContent = APP_VERSION;
 applyLang();
 show('home');
+
+// Offline play: register sw.js only on the GitHub Pages copy (https + *.github.io).
+// Not on claude.ai or a local file. If it fails, the game simply needs the internet as before.
+try {
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && /(^|\.)github\.io$/.test(location.hostname)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+} catch (e) {}
 })();
 </script>
 
