@@ -2,7 +2,7 @@
 // Network-first: online = always fetch the latest page from GitHub and keep a fresh copy;
 // offline (or no answer within NET_TIMEOUT_MS while a copy exists) = serve the saved copy.
 // Bump CACHE with every release (matches APP_VERSION in the game) so old copies are deleted.
-const CACHE = 'towermaze-v0.6.4';
+const CACHE = 'towermaze-v0.7.0';
 const NET_TIMEOUT_MS = 6000;
 const PAGE = new URL('./', self.location).href; // .../towermaze/
 
