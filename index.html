@@ -70,8 +70,6 @@ button:focus-visible{outline:2px solid var(--tower);outline-offset:2px}
 .tool .tn{display:inline-flex;align-items:center;gap:3px}
 .tool .nm{font-size:13px;white-space:nowrap}
 .tool .ti{width:18px;height:18px;display:block}
-.lvhead{grid-column:1/-1;margin-top:6px;color:var(--muted);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
-.lvhead:first-child{margin-top:0}
 
 /* settings */
 .setrow{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px 10px 14px}
@@ -813,9 +811,6 @@ function starStr(n) { return '★'.repeat(n) + '☆'.repeat(3 - n); }
 function buildLevels() {
   const grid = $('lvGrid'); grid.textContent = '';
   LEVELS.forEach(lv => {
-    if ((lv.id - 1) % 10 === 0) { // a heading every 10 stages so 40+ stays easy to scan
-      const h = document.createElement('div'); h.className = 'lvhead'; h.textContent = `${lv.id}–${Math.min(lv.id + 9, LEVELS.length)}`; grid.appendChild(h);
-    }
     const b = document.createElement('button'); b.className = 'lv';
     const st = save.stars[lv.id] || 0, rec = save.rec[lv.id];
     b.innerHTML = `<b>${lv.id}</b><small>${starStr(st)}</small>` + (rec !== undefined ? `<small class="rec">${tr('used', rec)}</small>` : '') +
