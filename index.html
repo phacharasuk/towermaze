@@ -246,6 +246,7 @@ canvas{display:block}
     <div class="actions">
       <button id="btnMain" class="main"></button>
       <button id="btnSpeed" class="speed" aria-pressed="false">×2</button>
+      <button id="btnAuto" class="speed" aria-pressed="false" hidden>Auto</button>
     </div>
   </section>
 </div>
@@ -417,17 +418,36 @@ const LEVELS = LEVELS_RAW.map(parseLevel);
 
 // Endless: one fixed sequence for everyone (fixed seed) so best scores compare fairly
 function seeded(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const ENDLESS_TUNE = { hpA: 0.08, hpB: 0.003, budget0: 12, budgetW: 2.2, bossEvery: 10 };
+// Endless only (v0.7): enemy count +4% per wave, enemy HP grows in steps, compounded every wave from wave 2:
+// waves 2–20 +3% · 21–40 +4% · 41–60 +4.5% · 61 on +5% (×1.75 at wave 20, ×3.8 at 40, ×9.3 at 60, ×25 at 80). Stages keep fixed HP.
+const ENDLESS_TUNE = { cnt: 0.04, hpSteps: [[20, 0.03], [40, 0.04], [60, 0.045], [Infinity, 0.05]], budget0: 12, budgetW: 2.2, bossEvery: 10 };
 const FIXED_SEED = 20261011;
-const INTEREST = { rate: 0.05, cap: 20 }; // endless only: paid on the gold in hand when a wave is cleared, before the bonus
-function interestOn(gold) { return Math.min(INTEREST.cap, Math.floor(gold * INTEREST.rate)); }
+// endless only: paid on the gold in hand when a wave is cleared, before the bonus · the cap grows by 20 every 10 waves
+const INTEREST = { rate: 0.05, cap: 20, capStep: 20, capEvery: 10 };
+function interestCap(wi) { return INTEREST.cap + INTEREST.capStep * Math.floor(wi / INTEREST.capEvery); } // wi = 0-based wave index
+function interestOn(gold, wi) { return Math.min(interestCap(wi), Math.floor(gold * INTEREST.rate)); }
+// Endless only: towers upgrade past Lv 3 with no top level. Each extra level costs ×1.3 the one before (starting
+// from the Lv 3 upgrade price), damage ×1.2, range +0.1 (at most +0.5), Frost slows 3% more (at most 75%).
+const UPGRADE = { cost: 1.3, dmg: 1.2, range: 0.1, rangeMax: 0.5, slow: 0.03, slowMax: 0.75 };
+const SELL_ENDLESS = 0.8; // Endless refunds 80% when selling · Stages refund in full
+function towerStat(def, key, lvl) { // Lv 1–3 come from the tables; higher levels (Endless only) are worked out from Lv 3
+  const a = def[key]; if (lvl < a.length) return a[lvl];
+  const top = a[a.length - 1], x = lvl - a.length + 1;
+  if (key === 'dmg') return Math.round(top * Math.pow(UPGRADE.dmg, x));
+  if (key === 'range') return Math.round((top + Math.min(UPGRADE.rangeMax, UPGRADE.range * x)) * 100) / 100;
+  if (key === 'slow') return Math.round(Math.min(UPGRADE.slowMax, top + UPGRADE.slow * x) * 100) / 100;
+  if (key === 'cost') return Math.round(top * Math.pow(UPGRADE.cost, x));
+  return top; // cd · splash · maxHit stay as at Lv 3
+}
 // mix (Random only): before wave 10 a wave is never Flyers-only or Armored-only, so one lucky/unlucky roll can't decide the run
 function genEndless(count, seed, mix) {
   const rnd = seeded(seed === undefined ? FIXED_SEED : seed), waves = [];
   const weight = { normal: 1, fast: 0.8, armor: 2.5, fly: 2 }, gap0 = { normal: 0.4, fast: 0.3, armor: 0.9, fly: 1.0 };
+  let hpMul = 1;
   for (let w = 1; w <= count; w++) {
-    // enemy HP never changes; later waves bring more enemies, arriving closer together
-    const more = 1 + ENDLESS_TUNE.hpA * (w - 1) + ENDLESS_TUNE.hpB * (w - 1) * (w - 1);
+    // later waves bring more enemies, arriving closer together, and every enemy (bosses too) has more HP
+    if (w > 1) hpMul *= 1 + ENDLESS_TUNE.hpSteps.find(s => w <= s[0])[1];
+    const more = 1 + ENDLESS_TUNE.cnt * (w - 1), hp = Math.round(hpMul * 100) / 100;
     const pool = ['normal'];
     if (w >= 3) pool.push('fast'); if (w >= 4) pool.push('armor'); if (w >= 6) pool.push('fly');
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
@@ -437,6 +457,7 @@ function genEndless(count, seed, mix) {
     const wave = pool.slice(0, k).map(t => ({ t, n: Math.max(3, Math.round(share * more / weight[t])),
       gap: Math.max(0.06, Math.round(gap0[t] * f / Math.sqrt(more) * 100) / 100) }));
     if (w % ENDLESS_TUNE.bossEvery === 0) wave.push({ t: 'boss', n: w / ENDLESS_TUNE.bossEvery, gap: 3 }); // bosses close every 10th wave
+    if (hp > 1) for (const grp of wave) grp.hp = hp;
     waves.push(wave);
   }
   return waves;
@@ -483,13 +504,18 @@ function newGame(lv, vis) {
            wave: 0, phase: 'plan', leaked: 0, fight: null };
 }
 function blockedOf(g) { const b = new Uint8Array(N); for (let i = 0; i < N; i++) if (g.towers[i]) b[i] = 1; return b; }
-function towerValue(t) { let v = 0; for (let k = 0; k <= t.lvl; k++) v += TOWERS[t.type].cost[k]; return v; }
+function towerValue(t) { let v = 0; for (let k = 0; k <= t.lvl; k++) v += towerStat(TOWERS[t.type], 'cost', k); return v; }
+function sellValue(g, t) { return g.lv.endless ? Math.floor(towerValue(t) * SELL_ENDLESS) : towerValue(t); }
+// Endless lets you build, upgrade and sell while a wave runs (not while a resumed wave replays) · Stages only before a wave
+function canEdit(g) { return !g.locked && (g.phase === 'plan' || (g.phase === 'fight' && !!g.lv.endless)); }
 function spent(g) { let s = 0; for (const t of g.towers) if (t) s += towerValue(t); return s; }
 
 function placeCheck(g, type, i) {
-  if (g.phase !== 'plan') return 'phase';
+  if (!canEdit(g)) return 'phase';
   if (!g.lv.tools.includes(type)) return 'tool';
   if (i < 0 || i >= N || g.lv.rocks[i] || i === g.lv.entry || i === g.lv.exit || g.towers[i]) return 'occupied';
+  // mid-wave the enemies keep this wave's route: nothing may be built on it (a new maze counts from the next wave)
+  if (g.phase === 'fight' && g.fight.path.includes(i)) return 'route';
   if (g.gold < TOWERS[type].cost[0]) return 'gold';
   const b = blockedOf(g); b[i] = 1;
   if (!findPath(g.lv, b)) return 'block';
@@ -499,16 +525,20 @@ function tryPlace(g, type, i) {
   const e = placeCheck(g, type, i); if (e) return e;
   g.towers[i] = { type, lvl: 0 }; g.gold -= TOWERS[type].cost[0]; return null;
 }
-function upgradeCost(t) { const c = TOWERS[t.type].cost; return t.lvl + 1 < c.length ? c[t.lvl + 1] : null; }
+function upgradeCost(t, endless) {
+  const c = TOWERS[t.type].cost;
+  if (t.lvl + 1 < c.length) return c[t.lvl + 1];
+  return endless && t.type !== 'wall' ? towerStat(TOWERS[t.type], 'cost', t.lvl + 1) : null; // Endless: no top level
+}
 function tryUpgrade(g, i) {
-  const t = g.towers[i]; if (!t || g.phase !== 'plan') return 'phase';
-  const c = upgradeCost(t); if (c === null) return 'max';
+  const t = g.towers[i]; if (!t || !canEdit(g)) return 'phase';
+  const c = upgradeCost(t, g.lv.endless); if (c === null) return 'max';
   if (g.gold < c) return 'gold';
   g.gold -= c; t.lvl++; return null;
 }
 function sell(g, i) {
-  const t = g.towers[i]; if (!t || g.phase !== 'plan') return 'phase';
-  g.gold += towerValue(t); g.towers[i] = null; return null;
+  const t = g.towers[i]; if (!t || !canEdit(g)) return 'phase';
+  g.gold += sellValue(g, t); g.towers[i] = null; return null;
 }
 
 function posAt(path, d) {
@@ -564,7 +594,7 @@ function step(g) {
     const def = TOWERS[t.type];
     F.cd[i] -= TICK;
     if (F.cd[i] > 1e-9) continue;
-    const tx = i % COLS, ty = (i / COLS) | 0, R = def.range[t.lvl], R2 = R * R;
+    const lvl = t.lvl, tx = i % COLS, ty = (i / COLS) | 0, R = towerStat(def, 'range', lvl), R2 = R * R;
     let best = null;
     for (const e of F.enemies) {
       if (e.hp <= 0 || !canHit(def, e)) continue;
@@ -572,9 +602,9 @@ function step(g) {
       if (dx * dx + dy * dy <= R2 && (!best || e.d > best.d)) best = e;
     }
     if (!best) { F.cd[i] = 0; continue; }
-    const dmg = def.dmg[t.lvl];
+    const dmg = towerStat(def, 'dmg', lvl);
     if (def.slow) {
-      const s = def.slow[t.lvl], until = F.tick + Math.round(def.slowDur / TICK);
+      const s = towerStat(def, 'slow', lvl), until = F.tick + Math.round(def.slowDur / TICK);
       for (const e of F.enemies) {
         if (e.hp <= 0 || !canHit(def, e)) continue;
         const dx = e.x - tx, dy = e.y - ty;
@@ -585,21 +615,21 @@ function step(g) {
       }
       if (g.vis) { F.fx.push({ k: 'pulse', from: i, x: tx, y: ty, r: R, life: 0.35, max: 0.35 }); g.ev.push('frost'); }
     } else if (def.splash) {
-      const S = def.splash[t.lvl], S2 = S * S, near = [];
+      const S = towerStat(def, 'splash', lvl), S2 = S * S, near = [];
       for (const e of F.enemies) {
         if (e.hp <= 0 || !canHit(def, e)) continue;
         const dx = e.x - best.x, dy = e.y - best.y, q = dx * dx + dy * dy;
         if (q <= S2) near.push([q, e]);
       }
       near.sort((a, b) => a[0] - b[0]); // stable sort keeps ties in spawn order, so results stay repeatable
-      for (let k = 0; k < Math.min(near.length, def.maxHit[t.lvl]); k++) { const e = near[k][1]; hit(e, ENEMIES[e.type].blastRes ? 0 : dmg); }
+      for (let k = 0; k < Math.min(near.length, towerStat(def, 'maxHit', lvl)); k++) { const e = near[k][1]; hit(e, ENEMIES[e.type].blastRes ? 0 : dmg); }
       if (g.vis) { F.fx.push({ k: 'boom', from: i, x: best.x, y: best.y, r: S, life: 0.3, max: 0.3 }); g.ev.push('boom'); }
     } else {
       hit(best, dmg);
       if (g.vis) { F.fx.push({ k: 'shot', from: i, x: best.x, y: best.y, life: 0.09, max: 0.09 }); g.ev.push(t.type === 'aa' ? 'aa' : 'gun'); }
     }
     if (g.vis && !def.slow) { if (!F.aim) F.aim = {}; F.aim[i] = Math.atan2(best.y - ty, best.x - tx); }
-    F.cd[i] += def.cd[t.lvl];
+    F.cd[i] += towerStat(def, 'cd', lvl);
   }
 
   const left = [];
@@ -613,7 +643,7 @@ function step(g) {
   F.tick++;
 
   if (F.si >= F.spawns.length && F.enemies.length === 0) {
-    g.lastInterest = g.lv.endless ? interestOn(g.gold) : 0;
+    g.lastInterest = g.lv.endless ? interestOn(g.gold, g.wave) : 0;
     g.gold += g.lastInterest + g.lv.bonus + (g.lv.endless ? Math.floor(g.wave / 2) : 0); g.wave++;
     g.lastAim = F.aim; g.fight = null;
     g.phase = g.wave >= g.lv.waves.length ? 'won' : 'plan';
@@ -643,7 +673,7 @@ function simulate(lv, plan) {
   return { phase: g.phase, wave: g.wave, leaked: g.leaked, lives: g.lives, spent: spent(g), gold: g.gold, stars: starsOf(g), errs };
 }
 
-window.TM = { COLS, ROWS, TOWERS, ENEMIES, LEVELS, LEVELS_RAW, ENDLESS_TUNE, INTEREST, interestOn, genEndless, makeEndless, parseLevel, findPath, newGame, placeCheck, tryPlace, tryUpgrade, sell, startWave, step, simulate, spent, starsOf, posAt };
+window.TM = { COLS, ROWS, TOWERS, ENEMIES, LEVELS, LEVELS_RAW, ENDLESS_TUNE, INTEREST, UPGRADE, SELL_ENDLESS, interestOn, interestCap, towerStat, upgradeCost, sellValue, canEdit, genEndless, makeEndless, parseLevel, findPath, newGame, placeCheck, tryPlace, tryUpgrade, sell, startWave, step, simulate, spent, starsOf, posAt };
 
 /* ================= text (TH / EN) — mode names stay English in both ================= */
 const TXT = {
@@ -653,6 +683,7 @@ const TXT = {
     limited: 'จำกัดป้อม', wavesBtn: (c, t) => t ? `คลื่น ${c}/${t} ▾` : `คลื่น ${c} ▾`, stageN: n => `ด่าน ${n}`, hpx: x => `เลือด ×${x}`, startWave: n => `เริ่มคลื่น ${n}`, incoming: n => `คลื่น ${n} กำลังมา`,
     cleared: 'จบด่าน', defeated: 'แพ้', lv: n => `ระดับ ${n}`, upgrade: c => `อัปเกรด ${c}`, maxLv: 'ระดับสูงสุด', sellFor: v => `ขาย +${v}`, close: 'ปิด',
     tBlock: 'วางไม่ได้ ทางไปทางออกจะถูกปิด', tGold: 'เงินไม่พอ', tOcc: 'ช่องนี้วางไม่ได้', tPhase: 'วางป้อมได้ตอนก่อนเริ่มคลื่น', tInterest: x => `ดอกเบี้ย +${x}`,
+    tRoute: 'ระหว่างคลื่น วางบนทางที่ศัตรูกำลังเดินไม่ได้',
     win: 'ชนะ', lose: 'แพ้', resWin: (l, u) => `หลุด ${l} ตัว · ใช้เงิน ${u}`, newBest: 'สถิติใหม่', bestX: x => `สถิติ ${x}`,
     rule3: p => `3 ดาว = ไม่หลุดเลย และใช้ไม่เกิน ${p}`, resLose: (n, w) => `ชีวิตหมดในคลื่นที่ ${w}`,
     retry: 'เล่นอีกครั้ง', next: 'ด่านถัดไป', allStages: 'เลือกด่าน', toHome: 'หน้าแรก', runOver: 'จบรอบ',
@@ -667,7 +698,8 @@ const TXT = {
     ground: 'ศัตรูบนพื้น', air: 'ศัตรูบิน', both: 'ศัตรูบนพื้นและบิน',
     cost: 'ราคา', range: 'ระยะ (ช่อง)', dmg: 'แรงต่อนัด', rate: 'นัดต่อวินาที', splash: 'รัศมีระเบิด (ช่อง)', maxHit: 'ระเบิดโดนสูงสุด (ตัว)', leakCost: 'หลุดแล้วเสียชีวิต', slow: 'ทำให้ช้าลง', slowDur: 'นานครั้งละ (วิ)',
     lvH: n => `ระดับ ${n}`, hp: 'เลือด', speed: 'ความเร็ว (ช่อง/วิ)', armor: 'เกราะ', bounty: 'เงินที่ได้',
-    endlessNote: 'เลือดของศัตรูแต่ละชนิดคงที่ทุกโหมด · ด่านยากและ Endless คลื่นหลัง ๆ จะมีศัตรูมากขึ้นแทน',
+    endlessNote: 'Stage: เลือดของศัตรูแต่ละชนิดคงที่ ด่านยากมีศัตรูมากขึ้นแทน · Endless: ทุกคลื่นศัตรูมากขึ้นและเลือดเพิ่มแบบทบต้น (คลื่น 2–20 +3% · 21–40 +4% · 41–60 +4.5% · 61 ขึ้นไป +5%) บอสมาทุก 10 คลื่น',
+    endlessTowers: 'Endless: อัปเกรดต่อได้ไม่จำกัด ระดับ 4 ขึ้นไปราคา ×1.3 ของระดับก่อน แรง ×1.2 ระยะ +0.1 (รวมไม่เกิน +0.5) น้ำแข็งช้าลงเพิ่ม 3% (สูงสุด 75%) · ขายได้คืน 80% · วาง อัปเกรด ขาย ระหว่างคลื่นได้ · ดอกเบี้ย 5% เพดาน 20 เพิ่มอีก 20 ทุก 10 คลื่น',
     names: { wall: 'กำแพง', gun: 'ปืน', cannon: 'ปืนใหญ่', frost: 'น้ำแข็ง', aa: 'ยิงอากาศ', normal: 'ธรรมดา', armor: 'เกราะ', fast: 'วิ่งเร็ว', fly: 'บิน', boss: 'บอส', shield: 'โล่' },
     descT: { wall: 'ไม่ยิง ใช้กั้นทางให้ศัตรูเดินอ้อม', gun: 'ยิงทีละตัว เร็ว', cannon: 'ยิงช้าแต่แรง ระเบิดโดนศัตรูที่อยู่ใกล้กันได้หลายตัว (มีจำนวนสูงสุด)',
       frost: 'ไม่ทำความเสียหาย ทำให้ศัตรูทุกตัวในวงช้าลง', aa: 'ระยะไกล ยิงได้แค่ศัตรูบิน' },
@@ -682,6 +714,7 @@ const TXT = {
     limited: 'Limited', wavesBtn: (c, t) => t ? `Wave ${c}/${t} ▾` : `Wave ${c} ▾`, stageN: n => `Stage ${n}`, hpx: x => `HP ×${x}`, startWave: n => `Start wave ${n}`, incoming: n => `Wave ${n} incoming`,
     cleared: 'Cleared', defeated: 'Defeated', lv: n => `Lv ${n}`, upgrade: c => `Upgrade ${c}`, maxLv: 'Max level', sellFor: v => `Sell +${v}`, close: 'Close',
     tBlock: 'Can’t place: it would block the exit', tGold: 'Not enough gold', tOcc: 'Can’t place here', tPhase: 'Place towers before the wave starts', tInterest: x => `Interest +${x}`,
+    tRoute: 'During a wave you can’t build on the enemies’ route',
     win: 'Victory', lose: 'Defeat', resWin: (l, u) => `Leaked ${l} · Spent ${u}`, newBest: 'New best', bestX: x => `Best ${x}`,
     rule3: p => `3★ = no leaks and spend ≤ ${p}`, resLose: (n, w) => `Out of lives in wave ${w}`,
     retry: 'Retry', next: 'Next stage', allStages: 'All stages', toHome: 'Home', runOver: 'Run over',
@@ -696,7 +729,8 @@ const TXT = {
     ground: 'ground enemies', air: 'flying enemies', both: 'ground and flying enemies',
     cost: 'Cost', range: 'Range (cells)', dmg: 'Damage per shot', rate: 'Shots per second', splash: 'Blast radius (cells)', maxHit: 'Max enemies per blast', leakCost: 'Lives lost if it gets through', slow: 'Slows by', slowDur: 'Lasts (s)',
     lvH: n => `Lv ${n}`, hp: 'HP', speed: 'Speed (cells/s)', armor: 'Armor', bounty: 'Gold reward',
-    endlessNote: 'Each enemy type always has the same HP · harder stages and later Endless waves bring more enemies instead',
+    endlessNote: 'Stages: each enemy type always has the same HP; harder stages bring more enemies instead · Endless: every wave brings more enemies with more HP, compounded (waves 2–20 +3% · 21–40 +4% · 41–60 +4.5% · 61 on +5%), and bosses come every 10 waves',
+    endlessTowers: 'Endless: towers upgrade with no top level. From Lv 4 each level costs ×1.3 the one before, damage ×1.2, range +0.1 (at most +0.5 in all), Frost slows 3% more (at most 75%) · Selling refunds 80% · You can build, upgrade and sell during a wave · Interest 5%, capped at 20, +20 more every 10 waves',
     names: { wall: 'Wall', gun: 'Gun', cannon: 'Cannon', frost: 'Frost', aa: 'Anti-Air', normal: 'Grunt', armor: 'Armored', fast: 'Runner', fly: 'Flyer', boss: 'Boss', shield: 'Shield' },
     descT: { wall: 'Doesn’t shoot. Blocks the way so enemies walk around it.', gun: 'Fast, hits one enemy at a time.', cannon: 'Slow but strong. The blast hits several enemies close together (up to a limit).',
       frost: 'No damage. Slows every enemy in range.', aa: 'Long range. Hits flying enemies only.' },
@@ -708,7 +742,7 @@ const TXT = {
 };
 
 /* ================= storage ================= */
-const APP_VERSION = 'v0.6.4'; // shown at the bottom of the home screen · bump on every release
+const APP_VERSION = 'v0.7.0'; // shown at the bottom of the home screen · bump on every release
 const KEY = 'towermaze_v2';
 // stars: best stars per stage · rec: least gold spent on a 3-star win · best / bestR: endless Classic / Random waves cleared
 // seen: towers (t) and enemies (e) met, for the Guide · lang, speed, sound: settings
@@ -716,13 +750,18 @@ const KEY = 'towermaze_v2';
 // v = data format version. Rule for future updates: never renumber existing stages, never change KEY —
 // add stages at the end and migrate old data here, so players keep their progress across updates.
 const DATA_V = 1;
-const save = { v: DATA_V, stars: {}, rec: {}, best: 0, bestR: 0, seen: { t: {}, e: {} }, lang: 'th', speed: 1, sound: true, run: {} };
+// ev = Endless rules version. v0.7 made Endless much harder, so Endless bests and saved runs from before are cleared once
+// (stars and stage records stay). Bump it only when Endless changes so much that old bests can't be compared.
+const ENDLESS_V = 2;
+const save = { v: DATA_V, ev: ENDLESS_V, stars: {}, rec: {}, best: 0, bestR: 0, seen: { t: {}, e: {} }, lang: 'th', speed: 1, sound: true, run: {} };
 function loadInto(o) {
   if (!o || typeof o !== 'object') return false;
   for (const k of ['stars', 'rec', 'run']) save[k] = o[k] && typeof o[k] === 'object' ? o[k] : {};
+  const sameEndless = o.ev === ENDLESS_V;
+  if (!sameEndless) save.run = {};
   // a 3-star record above the stage's current par came from an older balance: drop the record, keep the stars
   for (const n in save.rec) { const lv = LEVELS[n - 1]; if (!lv || !(save.rec[n] <= lv.par)) delete save.rec[n]; }
-  save.best = +o.best || 0; save.bestR = +o.bestR || 0;
+  save.best = sameEndless ? +o.best || 0 : 0; save.bestR = sameEndless ? +o.bestR || 0 : 0; save.ev = ENDLESS_V;
   save.seen = o.seen && o.seen.t && o.seen.e ? o.seen : { t: {}, e: {} };
   save.lang = o.lang === 'en' ? 'en' : 'th';
   save.speed = o.speed === 2 ? 2 : 1;
@@ -730,8 +769,8 @@ function loadInto(o) {
   save.v = DATA_V;
   return true;
 }
-try { loadInto(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {}
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} }
+try { if (loadInto(JSON.parse(localStorage.getItem(KEY) || 'null'))) persist(); } catch (e) {} // persist = store any one-time clean-up
 // backup code = "TM1-" + base64 of the save as JSON (text the player keeps in Notes/LINE)
 function backupCode() { return 'TM1-' + btoa(unescape(encodeURIComponent(JSON.stringify(save)))); }
 function restoreCode(text) {
@@ -794,6 +833,7 @@ const cv = $('cv');
 let ctx = cv.getContext('2d');
 let G = null, tool = 'wall', sel = -1, speed = 1, CS = 40, DPR = 1, preview = null, drag = null;
 let running = false, lastTs = 0, acc = 0, toastTimer = 0, bookTab = 't', bookFrom = 'home', wavesOpen = false;
+let auto = false, autoTimer = 0; // Endless "Auto": the next wave starts by itself 1 s after a wave ends
 
 function applyLang() {
   document.documentElement.lang = save.lang;
@@ -835,9 +875,10 @@ function startEndless(random) { startGame(makeEndless(random)); }
 
 // Endless save: the run is stored at every planning step and when a wave starts (f = 1).
 // A run saved mid-wave resumes with its towers locked, so the replayed wave ends exactly as it would have (no luck in the game).
+// Changes made during a wave are stored when the wave ends (until then the save keeps the start of the wave).
 const RUN_T = ['wall', 'gun', 'cannon', 'frost', 'aa'];
 function saveRun(fight) {
-  const g = G; if (!g || !g.lv.endless) return;
+  const g = G; if (!g || !g.lv.endless || (g.phase === 'fight' && !fight)) return;
   const t = []; g.towers.forEach((x, i) => { if (x) t.push(i + '.' + RUN_T.indexOf(x.type) + '.' + x.lvl); });
   save.run[g.lv.random ? 'R' : 'E'] = { s: g.lv.seed, w: g.wave, g: g.gold, l: g.lives, k: g.leaked, f: fight ? 1 : 0, t: t.join(',') };
   persist();
@@ -851,7 +892,7 @@ function loadRun(random) { // a game rebuilt from the saved run, or null when th
     g.wave = r.w; g.gold = r.g; g.lives = r.l; g.leaked = r.k || 0;
     for (const s of (r.t ? String(r.t).split(',') : [])) {
       const [i, ti, lvl] = s.split('.').map(Number), type = RUN_T[ti];
-      if (!type || !(i >= 0 && i < N) || g.towers[i] || lv.rocks[i] || i === lv.entry || i === lv.exit || !(lvl >= 0 && lvl < TOWERS[type].cost.length)) return null;
+      if (!type || !(i >= 0 && i < N) || g.towers[i] || lv.rocks[i] || i === lv.entry || i === lv.exit || !(Number.isInteger(lvl) && lvl >= 0 && (lvl < TOWERS[type].cost.length || (type !== 'wall' && lvl < 500)))) return null;
       g.towers[i] = { type, lvl };
     }
     if (!findPath(lv, blockedOf(g))) return null;
@@ -871,7 +912,7 @@ function endlessBest(lv) { return lv.random ? save.bestR : save.best; }
 function titleOf(lv) { return lv.endless ? (lv.random ? 'Endless Random' : 'Endless Classic') : tr('stageN', lv.id); }
 function startGame(lv, resumed) {
   G = resumed || newGame(lv, true); sel = -1; acc = 0; running = false; drag = null; speed = save.speed; wavesOpen = false;
-  tool = lv.tools[0];
+  tool = lv.tools[0]; stopAuto(); $('btnAuto').hidden = !lv.endless;
   markSeen(lv.tools, lv.endless ? lv.waves.slice(G.wave, G.wave + 2) : lv.waves); persist();
   if (lv.endless && !resumed) saveRun(false); // a new run replaces the saved one
   $('lvTitle').textContent = titleOf(lv);
@@ -923,7 +964,7 @@ function renderUI() {
   $('sLives').textContent = g.lives;
   $('sGold').textContent = g.gold;
   $('sSpent').textContent = spent(g);
-  if (lv.endless) $('sInt').textContent = '+' + interestOn(g.gold);
+  if (lv.endless) $('sInt').textContent = '+' + interestOn(g.gold, g.wave);
   const cur = Math.min(g.wave + 1, lv.waves.length);
   $('btnWaves').textContent = tr('wavesBtn', cur, lv.endless ? 0 : lv.waves.length);
   $('btnWaves').setAttribute('aria-expanded', wavesOpen ? 'true' : 'false');
@@ -935,27 +976,33 @@ function renderUI() {
     s.innerHTML = `<b>${k + 1}</b>${waveSummary(w)}`;
     wv.appendChild(s);
   });
-  for (const b of $('tools').children) {
-    b.setAttribute('aria-pressed', b.dataset.k === tool ? 'true' : 'false');
-    b.disabled = (g.gold < TOWERS[b.dataset.k].cost[0] && g.phase === 'plan') || !!g.locked;
-  }
-  const t = sel >= 0 ? g.towers[sel] : null;
-  if (!t) sel = -1;
-  $('tools').hidden = !!t; $('tpanel').hidden = !t;
-  if (t) {
-    const plan = g.phase === 'plan' && !g.locked, uc = upgradeCost(t);
-    $('tName').textContent = t.type === 'wall' ? nm('wall') : `${nm(t.type)} ${tr('lv', t.lvl + 1)}`;
-    $('btnUp').hidden = t.type === 'wall';
-    $('btnUp').textContent = uc === null ? tr('maxLv') : tr('upgrade', uc);
-    $('btnUp').disabled = !plan || uc === null || g.gold < uc;
-    $('btnSell').textContent = tr('sellFor', towerValue(t));
-    $('btnSell').disabled = !plan;
-  }
+  renderEdit();
   const main = $('btnMain');
   if (g.phase === 'plan') { main.textContent = tr('startWave', g.wave + 1); main.disabled = false; }
   else if (g.phase === 'fight') { main.textContent = tr('incoming', g.wave + 1); main.disabled = true; }
   else { main.textContent = g.phase === 'won' ? tr('cleared') : tr('defeated'); main.disabled = true; }
   $('btnSpeed').setAttribute('aria-pressed', speed === 2 ? 'true' : 'false');
+  $('btnAuto').setAttribute('aria-pressed', auto ? 'true' : 'false');
+}
+// tower buttons + the selected tower's panel (also refreshed during an Endless wave, when gold changes as enemies fall)
+function renderEdit() {
+  const g = G, edit = canEdit(g);
+  for (const b of $('tools').children) {
+    b.setAttribute('aria-pressed', b.dataset.k === tool ? 'true' : 'false');
+    b.disabled = !!g.locked || (edit && g.gold < TOWERS[b.dataset.k].cost[0]);
+  }
+  const t = sel >= 0 ? g.towers[sel] : null;
+  if (!t) sel = -1;
+  $('tools').hidden = !!t; $('tpanel').hidden = !t;
+  if (t) {
+    const uc = upgradeCost(t, g.lv.endless);
+    $('tName').textContent = t.type === 'wall' ? nm('wall') : `${nm(t.type)} ${tr('lv', t.lvl + 1)}`;
+    $('btnUp').hidden = t.type === 'wall';
+    $('btnUp').textContent = uc === null ? tr('maxLv') : tr('upgrade', uc);
+    $('btnUp').disabled = !edit || uc === null || g.gold < uc;
+    $('btnSell').textContent = tr('sellFor', sellValue(g, t));
+    $('btnSell').disabled = !edit;
+  }
 }
 
 function refreshPreview() { preview = G.phase === 'plan' ? findPath(G.lv, blockedOf(G)) : null; }
@@ -1020,7 +1067,11 @@ function drawTower(C, i, type, lvl, a) {
     ctx.beginPath(); ctx.moveTo(cx, oy); ctx.lineTo(cx + Math.cos(a) * (rad + 0.15), oy + Math.sin(a) * (rad + 0.15)); ctx.stroke();
     ctx.beginPath(); ctx.arc(cx, oy, rad, 0, Math.PI * 2); ctx.fill();
   }
-  for (let p = 0; p <= lvl; p++) { ctx.beginPath(); ctx.arc(cx - (lvl * 0.08) + p * 0.16, y + 0.83, 0.045, 0, Math.PI * 2); ctx.fill(); }
+  if (lvl < 3) { for (let p = 0; p <= lvl; p++) { ctx.beginPath(); ctx.arc(cx - (lvl * 0.08) + p * 0.16, y + 0.83, 0.045, 0, Math.PI * 2); ctx.fill(); } }
+  else { // Endless Lv 4+: the level number instead of pips
+    ctx.font = '700 0.24px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(lvl + 1), cx, y + 0.83); ctx.textAlign = 'start';
+  }
 }
 function drawDoor(C, i, col) {
   const x = i % COLS, y = (i / COLS) | 0, cx = x + 0.5, r = 0.28, top = y + 0.14, bot = y + 0.92;
@@ -1095,13 +1146,13 @@ function draw(alpha) {
   ctx.fillStyle = C.rock;
   for (let i = 0; i < N; i++) if (lv.rocks[i]) { rr(i % COLS + 0.04, ((i / COLS) | 0) + 0.04, 0.92, 0.92, 0.12); ctx.fill(); }
 
-  // drag ghost (plan phase only)
-  const ghost = drag && drag.mode === 'place' && g.phase === 'plan' ? drag.ghost : -1;
+  // drag ghost (whenever towers can be changed: before a wave, and during an Endless wave)
+  const ghost = drag && drag.mode === 'place' && canEdit(g) ? drag.ghost : -1;
   const gErr = ghost >= 0 ? placeCheck(g, tool, ghost) : null;
 
-  // planned path (with the ghost counted as blocked when it can be placed)
+  // planned path (with the ghost counted as blocked when it can be placed) · not drawn during a wave
   let path = F ? null : preview;
-  if (ghost >= 0 && !gErr) { const b = blockedOf(g); b[ghost] = 1; path = findPath(lv, b) || path; }
+  if (ghost >= 0 && !gErr && !F) { const b = blockedOf(g); b[ghost] = 1; path = findPath(lv, b) || path; }
   if (path) {
     ctx.strokeStyle = C.path; ctx.globalAlpha = 0.55; ctx.lineWidth = 2.5 / CS; ctx.setLineDash([4 / CS, 5 / CS]); ctx.lineCap = 'round';
     ctx.beginPath();
@@ -1130,9 +1181,9 @@ function draw(alpha) {
   if (ghost >= 0 || (selT && selT.type !== 'wall')) {
     for (let i = 0; i < N; i++) {
       const t = g.towers[i]; if (!t || t.type === 'wall' || i === sel) continue;
-      if (ghost >= 0 || t.type === selT.type) drawRange(C, i, TOWERS[t.type].range[t.lvl], false);
+      if (ghost >= 0 || t.type === selT.type) drawRange(C, i, towerStat(TOWERS[t.type], 'range', t.lvl), false);
     }
-    if (selT && selT.type !== 'wall' && ghost < 0) drawRange(C, sel, TOWERS[selT.type].range[selT.lvl], true);
+    if (selT && selT.type !== 'wall' && ghost < 0) drawRange(C, sel, towerStat(TOWERS[selT.type], 'range', selT.lvl), true);
   }
 
   // towers
@@ -1218,17 +1269,19 @@ function frame(ts) {
 function playEvents() { if (G.ev && G.ev.length) { for (const e of new Set(G.ev)) sfx(e); G.ev.length = 0; } }
 function renderStats() {
   $('sLives').textContent = G.lives; $('sGold').textContent = G.gold;
-  if (G.lv.endless) $('sInt').textContent = '+' + interestOn(G.gold);
+  if (G.lv.endless) { $('sInt').textContent = '+' + interestOn(G.gold, G.wave); renderEdit(); }
 }
 
 function afterFight() {
+  G.locked = false; // a resumed (replayed) wave is over: towers can be changed again
   if (G.phase === 'plan') {
     sfx('wave');
     if (G.lv.endless) {
       markSeen([], G.lv.waves.slice(G.wave, G.wave + 2)); saveRun(false);
       if (G.lastInterest > 0) toast(tr('tInterest', G.lastInterest));
+      if (auto) scheduleAuto();
     }
-  } else if (G.lv.endless) clearRun(G.lv.random); // run over
+  } else if (G.lv.endless) { stopAuto(); clearRun(G.lv.random); } // run over
   refreshPreview(); renderUI(); draw(0); startIdle();
   if (G.phase === 'won' || G.phase === 'lost') { sfx(G.phase === 'won' ? 'win' : 'lose'); showResult(); }
 }
@@ -1271,7 +1324,7 @@ function showResult() {
 // Placing (every tool, walls too): press on the board and drag; the ghost is the cell under the finger,
 // release drops it. A plain tap on an empty cell places too.
 const MOVE_PX = 8;
-const REASON = { block: 'tBlock', gold: 'tGold', occupied: 'tOcc' };
+const REASON = { block: 'tBlock', gold: 'tGold', occupied: 'tOcc', route: 'tRoute' };
 function boardXY(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
 function cellAt(x, y) {
   const c = Math.floor(x / CS), r = Math.floor(y / CS);
@@ -1286,15 +1339,15 @@ cv.addEventListener('pointerdown', e => {
   const [x, y] = boardXY(e), down = cellAt(x, y);
   drag = { id: e.pointerId, x0: x, y0: y, t0: performance.now(), down, moved: false, mode: 'fight', ghost: -1 };
   if (down >= 0 && G.towers[down]) drag.mode = 'pending';
-  else if (G.phase === 'plan' && sel >= 0) drag.mode = 'deselect'; // first tap away from a selected tower only closes it
-  else if (G.phase === 'plan' && !G.locked) { drag.mode = 'place'; drag.ghost = down; renderUI(); }
+  else if (canEdit(G) && sel >= 0) drag.mode = 'deselect'; // first tap away from a selected tower only closes it
+  else if (canEdit(G)) { drag.mode = 'place'; drag.ghost = down; renderUI(); }
   redraw();
 });
 cv.addEventListener('pointermove', e => {
   if (!drag || e.pointerId !== drag.id) return;
   const [x, y] = boardXY(e);
   if (!drag.moved && Math.hypot(x - drag.x0, y - drag.y0) > MOVE_PX) drag.moved = true;
-  if ((drag.mode === 'pending' || drag.mode === 'deselect') && drag.moved && G.phase === 'plan' && !G.locked) { drag.mode = 'place'; sel = -1; renderUI(); }
+  if ((drag.mode === 'pending' || drag.mode === 'deselect') && drag.moved && canEdit(G)) { drag.mode = 'place'; sel = -1; renderUI(); }
   if (drag.mode !== 'place') return;
   const gc = cellAt(x, y);
   if (gc !== drag.ghost) { drag.ghost = gc; redraw(); }
@@ -1316,15 +1369,15 @@ cv.addEventListener('pointerup', e => { if (drag && e.pointerId === drag.id) fin
 cv.addEventListener('pointercancel', e => { if (drag && e.pointerId === drag.id) finishDrag(false); });
 
 $('btnUp').addEventListener('click', () => {
-  if (sel < 0 || G.locked) return;
+  if (sel < 0 || !canEdit(G)) return;
   const e = tryUpgrade(G, sel);
   if (e === 'gold') { toast(tr('tGold')); sfx('error'); } else if (!e) { sfx('place'); saveRun(false); }
-  renderUI(); draw(0);
+  renderUI(); redraw();
 });
 $('btnSell').addEventListener('click', () => {
-  if (sel < 0 || G.locked) return;
+  if (sel < 0 || !canEdit(G)) return;
   if (!sell(G, sel)) { sel = -1; refreshPreview(); sfx('sell'); saveRun(false); }
-  renderUI(); draw(0);
+  renderUI(); redraw();
 });
 $('btnClose').addEventListener('click', () => { sel = -1; renderUI(); draw(0); });
 
@@ -1333,15 +1386,34 @@ $('btnMain').addEventListener('click', () => {
   const now = Date.now(); if (now - lastMain < 300) return; lastMain = now;
   if (!G || G.phase !== 'plan') return;
   audio(); // unlock sound inside the tap on iPhone
-  startWave(G); G.locked = false; saveRun(true); refreshPreview(); renderUI();
+  beginWave();
+});
+// a resumed run stays locked until its replayed wave ends (afterFight), so that wave plays out exactly as saved
+function beginWave() {
+  clearTimeout(autoTimer); drag = null;
+  startWave(G); saveRun(true); refreshPreview(); renderUI();
   running = true; acc = 0; lastTs = performance.now();
   requestAnimationFrame(frame);
+}
+function stopAuto() { auto = false; clearTimeout(autoTimer); }
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(function tick() {
+    if (!auto || !G || !G.lv.endless || G.phase !== 'plan' || running) return;
+    if (scr.play.hidden || !$('overlay').hidden || drag) { autoTimer = setTimeout(tick, 500); return; } // wait: Guide open / finger down
+    beginWave();
+  }, 1000);
+}
+$('btnAuto').addEventListener('click', () => {
+  auto = !auto;
+  if (auto && G && G.phase === 'plan') scheduleAuto(); else if (!auto) clearTimeout(autoTimer);
+  renderUI();
 });
 $('btnSpeed').addEventListener('click', () => { speed = speed === 2 ? 1 : 2; renderUI(); });
 $('btnWaves').addEventListener('click', () => { wavesOpen = !wavesOpen; renderUI(); });
 $('waves').addEventListener('click', () => { wavesOpen = false; renderUI(); });
 $('btnRestart').addEventListener('click', () => { if (G) G.lv.endless ? startEndless(G.lv.random) : startLevel(G.lv.id); });
-document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => { running = false; show('home'); }));
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', () => { running = false; stopAuto(); show('home'); }));
 
 /* ---------- home / endless menu / settings ---------- */
 $('goStage').addEventListener('click', () => show('levels'));
@@ -1434,7 +1506,7 @@ function buildBook() {
     }
     list.appendChild(box);
   }
-  if (bookTab === 'e') { const p = document.createElement('p'); p.className = 'note'; p.textContent = tr('endlessNote'); list.appendChild(p); }
+  { const p = document.createElement('p'); p.className = 'note'; p.textContent = tr(bookTab === 'e' ? 'endlessNote' : 'endlessTowers'); list.appendChild(p); }
 }
 function openBook(from) { bookFrom = from; show('book'); }
 $('btnInfo').addEventListener('click', () => { drag = null; openBook('play'); });
