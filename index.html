@@ -12,7 +12,7 @@
   --tower:#2c5a4e; --on-accent:#ffffff; --cannon:#7b4b26; --wall:#58635c; --base:#f3f5ef;
   --enemy:#c4521c; --armor:#46505e; --armor-edge:#9aa4b2; --hp:#2e7d4f; --danger:#b42318; --gold:#8a5f05; --star:#b98200;
   --entry:#2e7d4f; --exit:#b42318; --ok:#2e7d4f; --scrim:rgba(30,38,34,.38);
-  --frost:#2b78b5; --aa:#6b4fa0; --fast:#a87a00; --fly:#b83280; --boss:#3f1d6b;
+  --frost:#2b78b5; --aa:#6b4fa0; --fast:#a87a00; --fly:#b83280; --boss:#3f1d6b; --shield:#2f6f8f;
   --font:"Leelawadee UI","Thonburi","Noto Sans Thai","Sukhumvit Set",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -21,14 +21,14 @@
   --tower:#7fb8a4; --on-accent:#0f1a16; --cannon:#c99a6b; --wall:#8a958d; --base:#262e28;
   --enemy:#f08a5d; --armor:#a3acb9; --armor-edge:#5b6573; --hp:#6fcf97; --danger:#f97066; --gold:#e0b44c; --star:#e9b949;
   --entry:#6fcf97; --exit:#f97066; --ok:#6fcf97; --scrim:rgba(0,0,0,.55);
-  --frost:#7cc4f0; --aa:#b49ae0; --fast:#e9c46a; --fly:#f07ab8; --boss:#c4a5ff; color-scheme:dark}}
+  --frost:#7cc4f0; --aa:#b49ae0; --fast:#e9c46a; --fly:#f07ab8; --boss:#c4a5ff; --shield:#7fc6e4; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#131714; --panel:#1c221e; --ink:#e4eae2; --muted:#9aa79e; --line:#323b34;
   --field:#1b211c; --grid:#2b342d; --rock:#4b5149; --path:#6d7d68;
   --tower:#7fb8a4; --on-accent:#0f1a16; --cannon:#c99a6b; --wall:#8a958d; --base:#262e28;
   --enemy:#f08a5d; --armor:#a3acb9; --armor-edge:#5b6573; --hp:#6fcf97; --danger:#f97066; --gold:#e0b44c; --star:#e9b949;
   --entry:#6fcf97; --exit:#f97066; --ok:#6fcf97; --scrim:rgba(0,0,0,.55);
-  --frost:#7cc4f0; --aa:#b49ae0; --fast:#e9c46a; --fly:#f07ab8; --boss:#c4a5ff; color-scheme:dark}
+  --frost:#7cc4f0; --aa:#b49ae0; --fast:#e9c46a; --fly:#f07ab8; --boss:#c4a5ff; --shield:#7fc6e4; color-scheme:dark}
 [hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;
@@ -270,6 +270,8 @@ const ENEMIES = {
   fly:    { name: 'บิน', hp: 45, speed: 1.2, armor: 0, bounty: 2, fly: true },
   // boss: costs `lives` lives when it gets through · slowRes = share of a Frost slow that works on it
   boss:   { name: 'บอส', hp: 600, speed: 0.5, armor: 2, bounty: 15, lives: 3, slowRes: 0.5 },
+  // blastRes: a Cannon blast does only 1 damage to it (Gun / Frost / Anti-Air work normally)
+  shield: { name: 'โล่', hp: 40, speed: 1.0, armor: 0, bounty: 2, blastRes: true },
 };
 
 // map: S = entry, E = exit, # = rock · theme: 1 gun+wall · 2 cannon · 3 frost · 4 anti-air (par = best plan the solver found)
@@ -292,8 +294,8 @@ const LEVELS_RAW = [
     waves: [[w('normal', 10, 0.6)], [w('fast', 10, 0.6)], [w('normal', 12, 0.4), w('fast', 12, 0.4)], [w('fast', 25, 0.3)]] },
   /* 8  T3 */ { map: ['....S...', O, '.#....#.', O, '...##...', O, '.#....#.', O, '...##...', O, '...E....'], gold: 90, bonus: 10, lives: 5, par: 100, tools: ['wall', 'gun', 'frost'],
     waves: [[w('fast', 12, 0.45)], [w('normal', 14, 0.4), w('fast', 10, 0.35)], [w('fast', 24, 0.25)], [w('normal', 24, 0.25), w('fast', 24, 0.22)]] },
-  /* 9  T2 */ { map: ['....S...', O, O, '.##..##.', O, '...##...', O, '.##..##.', O, O, '...E....'], gold: 75, bonus: 10, lives: 5, par: 98, tools: ['wall', 'gun', 'cannon'],
-    waves: [[w('normal', 18, 0.35)], [w('armor', 8, 1)], [w('normal', 20, 0.28), w('armor', 8, 0.8)], [w('armor', 16, 0.6)], [w('normal', 36, 0.22), w('armor', 12, 0.7)]] },
+  /* 9  T2 */ { map: ['....S...', O, O, '.##..##.', O, '...##...', O, '.##..##.', O, O, '...E....'], gold: 75, bonus: 10, lives: 5, par: 88, tools: ['wall', 'gun', 'cannon'],
+    waves: [[w('normal', 12, 0.35)], [w('armor', 5, 1)], [w('normal', 14, 0.28), w('armor', 5, 0.8)], [w('armor', 11, 0.6)], [w('normal', 24, 0.22), w('armor', 8, 0.7)]] },
   /* 10 T1 */ { map: ['.S......', O, '....#...', '....#...', '.#......', '.#...#..', '.....#..', '...#....', '...#....', O, '......E.'], gold: 80, bonus: 10, lives: 5, par: 72, tools: ['wall', 'gun'],
     waves: [[w('normal', 12, 0.5)], [w('fast', 10, 0.45)], [w('normal', 20, 0.35), w('fast', 10, 0.35)], [w('fast', 24, 0.3)], [w('normal', 36, 0.25)]] },
   /* 11 T4 */ { map: ['S.......', O, '...#....', '...#....', O, '....#...', '....#...', O, O, O, '.......E'], gold: 90, bonus: 10, lives: 5, par: 110, tools: ['wall', 'gun', 'aa'],
@@ -312,24 +314,24 @@ const LEVELS_RAW = [
     waves: [[w('armor', 7, 0.8)], [w('normal', 21, 0.22), w('armor', 7, 0.7)], [w('armor', 14, 0.55)], [w('normal', 28, 0.18), w('armor', 14, 0.5)], [w('armor', 21, 0.45), w('normal', 21, 0.2)]] },
   /* 18 T3 */ { map: ['.......S', O, '...##...', O, '.#....#.', O, '...##...', O, '.#....#.', O, 'E.......'], gold: 100, bonus: 10, lives: 5, par: 122, tools: ['wall', 'gun', 'frost'],
     waves: [[w('fast', 16, 0.35)], [w('fast', 24, 0.25)], [w('normal', 20, 0.3), w('fast', 20, 0.22)], [w('fast', 40, 0.18)], [w('normal', 30, 0.22), w('fast', 40, 0.15)]] },
-  /* 19 T1 */ { map: ['...S....', O, O, '.######.', O, O, O, '.######.', O, O, '....E...'], gold: 110, bonus: 10, lives: 5, par: 130, tools: ['wall', 'gun'],
+  /* 19 T1 */ { map: ['...S....', O, O, '.######.', O, O, O, '.######.', O, O, '....E...'], gold: 90, bonus: 10, lives: 5, par: 126, tools: ['wall', 'gun'],
     waves: [[w('normal', 27, 0.27)], [w('fast', 27, 0.23)], [w('normal', 45, 0.18)], [w('fast', 45, 0.17), w('normal', 25, 0.22)], [w('normal', 65, 0.14)], [w('fast', 55, 0.14)]] },
-  /* 20 T4 */ { map: ['S.......', O, '..#..#..', O, O, '...##...', O, O, '..#..#..', O, '.......E'], gold: 120, bonus: 10, lives: 5, par: 145, tools: ['wall', 'gun', 'aa', 'frost'],
-    waves: [[w('normal', 14, 0.45)], [w('fly', 6, 1)], [w('normal', 18, 0.35), w('fly', 6, 0.9)], [w('fly', 12, 0.7)], [w('normal', 24, 0.3), w('fly', 12, 0.65)], [w('fly', 18, 0.55), w('fast', 16, 0.3)]] },
+  /* 20 T4 */ { map: ['S.......', O, '..#..#..', O, O, '...##...', O, O, '..#..#..', O, '.......E'], gold: 120, bonus: 10, lives: 5, par: 150, tools: ['wall', 'gun', 'aa', 'frost'],
+    waves: [[w('normal', 16, 0.45)], [w('fly', 7, 1)], [w('normal', 21, 0.35), w('fly', 7, 0.9)], [w('fly', 14, 0.7)], [w('normal', 28, 0.3), w('fly', 14, 0.65)], [w('fly', 21, 0.55), w('fast', 18, 0.3)]] },
   // 21–40: A = all towers (medium → hard) · R = restricted towers · boss = big enemy, costs 3 lives if it gets through
-  /* 21 A  */ { map: ['......S.', O, '......#.', '......#.', '......#.', O, '....##..', '...#####', O, O, 'E.......'], gold: 110, bonus: 10, lives: 5, par: 149, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('armor', 8, 0.8)], [w('armor', 10, 0.8)], [w('normal', 15, 0.35), w('fast', 19, 0.25)], [w('armor', 7, 0.8), w('normal', 18, 0.35)], [w('fly', 10, 0.9), w('normal', 20, 0.35), w('boss', 1, 3)]] },
+  /* 21 A  */ { map: ['......S.', O, '......#.', '......#.', '......#.', O, '....##..', '...#####', O, O, 'E.......'], gold: 110, bonus: 10, lives: 5, par: 162, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('armor', 9, 0.8)], [w('armor', 11, 0.8)], [w('normal', 17, 0.35), w('fast', 21, 0.25), w('shield', 8, 0.35)], [w('armor', 8, 0.8), w('normal', 20, 0.35), w('shield', 6, 0.35)], [w('fly', 11, 0.9), w('normal', 22, 0.35), w('boss', 1, 3)]] },
   /* 22 A  */ { map: ['.....S..', O, O, '###..###', O, '..#..#..', '..#..#..', '.######.', '..####..', O, '..E.....'], gold: 85, bonus: 10, lives: 5, par: 97, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 5, 0.35), w('armor', 3, 0.79), w('fast', 6, 0.25)], [w('normal', 6, 0.35), w('armor', 3, 0.79), w('fly', 3, 0.89)], [w('armor', 4, 0.79), w('fly', 5, 0.89)], [w('fast', 10, 0.25), w('fly', 4, 0.89), w('normal', 8, 0.35)], [w('armor', 11, 0.79)]] },
   /* 23 R  */ { map: ['......S.', O, O, '..#.....', '###..#..', '.....#..', '..#.....', '.######.', O, O, '....E...'], gold: 85, bonus: 10, lives: 5, par: 114, tools: ['wall', 'cannon'],
     waves: [[w('armor', 4, 0.78), w('normal', 11, 0.34)], [w('normal', 13, 0.34), w('armor', 6, 0.78)], [w('fast', 40, 0.25)], [w('fast', 46, 0.25)], [w('armor', 17, 0.78)]] },
   /* 24 A  */ { map: ['......S.', O, O, '#..##..#', O, '..####..', O, O, '.######.', O, '....E...'], gold: 85, bonus: 10, lives: 5, par: 114, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('armor', 3, 0.78), w('fast', 3, 0.24), w('normal', 3, 0.34)], [w('armor', 3, 0.78), w('normal', 5, 0.34)], [w('fast', 15, 0.24)], [w('normal', 7, 0.34), w('fly', 4, 0.87)], [w('armor', 3, 0.78), w('fly', 3, 0.87), w('fast', 7, 0.24), w('boss', 1, 3)]] },
-  /* 25 A  */ { map: ['.S......', O, '.....#..', '.....#.#', '.....#..', O, '.....#..', '....##.#', '....####', '.....#..', '.....E..'], gold: 125, bonus: 10, lives: 5, par: 142, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('normal', 12, 0.34), w('armor', 5, 0.77)], [w('fly', 5, 0.86), w('fast', 12, 0.24), w('armor', 4, 0.77)], [w('fast', 22, 0.24), w('normal', 18, 0.34)], [w('armor', 6, 0.77), w('fly', 7, 0.86), w('normal', 13, 0.34)], [w('fly', 23, 0.86)]] },
+  /* 25 A  */ { map: ['.S......', O, '.....#..', '.....#.#', '.....#..', O, '.....#..', '....##.#', '....####', '.....#..', '.....E..'], gold: 125, bonus: 10, lives: 5, par: 165, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('normal', 17, 0.34), w('armor', 7, 0.77)], [w('fly', 7, 0.86), w('fast', 17, 0.24), w('armor', 6, 0.77)], [w('fast', 31, 0.24), w('normal', 25, 0.34), w('shield', 11, 0.35)], [w('armor', 8, 0.77), w('fly', 10, 0.86), w('normal', 18, 0.34), w('shield', 7, 0.35)], [w('fly', 32, 0.86)]] },
   /* 26 A  */ { map: ['S.......', O, O, '###..###', '##....##', O, '.#....#.', '.######.', '.#.##.#.', '.#.##.#.', '..E.....'], gold: 110, bonus: 10, lives: 5, par: 155, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('armor', 3, 0.76), w('normal', 8, 0.33)], [w('armor', 4, 0.76), w('fast', 12, 0.24)], [w('fast', 14, 0.24), w('armor', 5, 0.76)], [w('fly', 13, 0.86)], [w('armor', 12, 0.76), w('boss', 1, 3)]] },
-  /* 27 R  */ { map: ['....S...', O, O, '.######.', O, '......##', O, '#.......', '....###.', O, 'E.......'], gold: 83, bonus: 10, lives: 5, par: 100, tools: ['gun', 'frost'],
+  /* 27 R  */ { map: ['....S...', O, O, '.######.', O, '......##', O, '#.......', '....###.', O, 'E.......'], gold: 96, bonus: 10, lives: 5, par: 100, tools: ['gun', 'frost'],
     waves: [[w('fast', 29, 0.24), w('normal', 22, 0.33)], [w('normal', 29, 0.33), w('fast', 35, 0.24)], [w('normal', 34, 0.33), w('fast', 42, 0.24)], [w('fast', 99, 0.24)], [w('normal', 90, 0.33)]] },
   /* 28 A  */ { map: ['......S.', O, O, '.#....#.', '.######.', '..#..#..', '..####..', '...##...', '.######.', O, 'E.......'], gold: 110, bonus: 10, lives: 5, par: 155, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 8, 0.33), w('fast', 10, 0.23)], [w('fast', 8, 0.23), w('armor', 3, 0.74), w('fly', 3, 0.84)], [w('normal', 12, 0.33), w('armor', 5, 0.74)], [w('normal', 9, 0.33), w('fly', 5, 0.84), w('armor', 4, 0.74)], [w('armor', 6, 0.74), w('normal', 16, 0.33), w('boss', 1, 3)]] },
@@ -339,59 +341,59 @@ const LEVELS_RAW = [
     waves: [[w('normal', 26, 0.32)], [w('fast', 41, 0.23)], [w('fly', 6, 0.82), w('fast', 16, 0.23), w('normal', 13, 0.32)], [w('fly', 23, 0.82)], [w('armor', 7, 0.73), w('normal', 18, 0.32), w('fly', 9, 0.82), w('boss', 1, 3)]] },
   /* 31 R  */ { map: ['......S.', O, '#.......', '####.#..', '#.#..#..', '.####...', '..###..#', '....#...', '....#...', O, '...E....'], gold: 110, bonus: 10, lives: 5, par: 160, tools: ['cannon', 'frost', 'aa'],
     waves: [[w('normal', 16, 0.26), w('armor', 7, 0.59)], [w('normal', 13, 0.26), w('armor', 5, 0.59), w('fly', 7, 0.67)], [w('fly', 12, 0.67), w('armor', 9, 0.59)], [w('fly', 14, 0.67), w('normal', 28, 0.26)], [w('normal', 32, 0.26), w('fly', 16, 0.67)], [w('normal', 25, 0.26), w('armor', 9, 0.59), w('fly', 12, 0.67)]] },
-  /* 32 A  */ { map: ['.......S', O, O, O, '##.##.##', '##.##.##', '##....##', '##.##.##', O, O, '...E....'], gold: 138, bonus: 10, lives: 5, par: 242, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('armor', 4, 0.58), w('fast', 13, 0.18), w('normal', 11, 0.26)], [w('fly', 10, 0.66), w('normal', 20, 0.26)], [w('armor', 10, 0.58), w('fast', 31, 0.18)], [w('armor', 8, 0.58), w('normal', 20, 0.26), w('fast', 25, 0.18)], [w('fly', 33, 0.66)], [w('fast', 46, 0.18), w('fly', 18, 0.66), w('boss', 2, 3)]] },
-  /* 33 A  */ { map: ['...S....', O, O, '.....#..', '.......#', '.####..#', '.#.#....', '.#.#....', '.###....', '.#.#....', '......E.'], gold: 140, bonus: 10, lives: 5, par: 205, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('armor', 7, 0.58), w('fast', 21, 0.18)], [w('normal', 14, 0.25), w('fly', 7, 0.65), w('armor', 6, 0.58)], [w('normal', 51, 0.25)], [w('armor', 12, 0.58), w('fly', 15, 0.65)], [w('armor', 27, 0.58)], [w('armor', 30, 0.58)]] },
-  /* 34 A  */ { map: ['......S.', O, '...##...', '..####..', '...##...', O, '.##..##.', '#.#..#.#', '#.#..#.#', '#.#..#.#', '...E....'], gold: 110, bonus: 10, lives: 5, par: 150, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('armor', 3, 0.57), w('fast', 6, 0.18), w('normal', 5, 0.25)], [w('fly', 3, 0.64), w('armor', 3, 0.57), w('normal', 6, 0.25)], [w('normal', 24, 0.25)], [w('normal', 28, 0.25)], [w('fly', 16, 0.64)], [w('fly', 18, 0.64), w('boss', 1, 3)]] },
-  /* 35 R  */ { map: ['...S....', O, '.#....#.', '.#....#.', O, '...##...', O, '.#....#.', '.#....#.', O, '....E...'], gold: 110, bonus: 10, lives: 5, par: 165, tools: ['wall', 'gun', 'aa'],
-    waves: [[w('normal', 19, 0.4)], [w('fast', 22, 0.3), w('fly', 5, 1)], [w('normal', 27, 0.3), w('fly', 11, 0.8)], [w('fast', 36, 0.25)], [w('fly', 19, 0.7), w('normal', 27, 0.3)], [w('fast', 41, 0.2), w('fly', 16, 0.7)]] },
+  /* 32 A  */ { map: ['.......S', O, O, O, '##.##.##', '##.##.##', '##....##', '##.##.##', O, O, '...E....'], gold: 138, bonus: 10, lives: 5, par: 237, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('armor', 4, 0.58), w('fast', 13, 0.18), w('normal', 11, 0.26)], [w('fly', 10, 0.66), w('normal', 20, 0.26)], [w('armor', 10, 0.58), w('fast', 31, 0.18)], [w('armor', 8, 0.58), w('normal', 20, 0.26), w('fast', 25, 0.18), w('shield', 11, 0.35)], [w('fly', 33, 0.66), w('shield', 7, 0.35)], [w('fast', 46, 0.18), w('fly', 18, 0.66), w('boss', 2, 3)]] },
+  /* 33 A  */ { map: ['...S....', O, O, '.....#..', '.......#', '.####..#', '.#.#....', '.#.#....', '.###....', '.#.#....', '......E.'], gold: 140, bonus: 10, lives: 5, par: 184, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('armor', 6, 0.58), w('fast', 17, 0.18)], [w('normal', 11, 0.25), w('fly', 6, 0.65), w('armor', 5, 0.58)], [w('normal', 41, 0.25)], [w('armor', 10, 0.58), w('fly', 12, 0.65), w('shield', 4, 0.35)], [w('armor', 22, 0.58), w('shield', 4, 0.35)], [w('armor', 24, 0.58)]] },
+  /* 34 A  */ { map: ['......S.', O, '...##...', '..####..', '...##...', O, '.##..##.', '#.#..#.#', '#.#..#.#', '#.#..#.#', '...E....'], gold: 110, bonus: 10, lives: 5, par: 125, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('armor', 3, 0.57), w('fast', 4, 0.18), w('normal', 3, 0.25)], [w('fly', 3, 0.64), w('armor', 3, 0.57), w('normal', 4, 0.25)], [w('normal', 16, 0.25)], [w('normal', 19, 0.25)], [w('fly', 11, 0.64)], [w('fly', 12, 0.64), w('boss', 1, 3)]] },
+  /* 35 R  */ { map: ['...S....', O, '.#....#.', '.#....#.', O, '...##...', O, '.#....#.', '.#....#.', O, '....E...'], gold: 110, bonus: 10, lives: 5, par: 160, tools: ['wall', 'gun', 'aa'],
+    waves: [[w('normal', 19, 0.4)], [w('fast', 22, 0.3), w('fly', 5, 1)], [w('normal', 26, 0.3), w('fly', 11, 0.8)], [w('fast', 35, 0.25)], [w('fly', 19, 0.7), w('normal', 26, 0.3)], [w('fast', 40, 0.2), w('fly', 16, 0.7)]] },
   /* 36 A  */ { map: ['.S......', O, '#...#...', O, '..#...#.', O, '#...#...', O, '..#...#.', O, '......E.'], gold: 100, bonus: 12, lives: 5, par: 114, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('fast', 5, 0.25)], [w('armor', 3, 0.7), w('normal', 5, 0.25)], [w('fly', 3, 0.6), w('fast', 5, 0.2)], [w('armor', 4, 0.6), w('fly', 3, 0.6), w('normal', 8, 0.2)], [w('fast', 10, 0.15), w('armor', 5, 0.5), w('fly', 4, 0.5), w('boss', 1, 3)]] },
   /* 37 A  */ { map: ['..S.....', O, O, O, '.#......', '.#......', '#######.', '.#..#...', '.#.###.#', '.......#', '......E.'], gold: 150, bonus: 10, lives: 5, par: 205, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('armor', 15, 0.51)], [w('normal', 49, 0.22)], [w('fast', 64, 0.16)], [w('fly', 34, 0.58)], [w('armor', 11, 0.51), w('fast', 34, 0.16), w('normal', 27, 0.22)], [w('normal', 64, 0.22)]] },
-  /* 38 A  */ { map: ['...S....', O, '.#....#.', '##....##', '#......#', '#......#', '##....##', '#..##..#', '##.##.##', '...##...', '.E......'], gold: 95, bonus: 10, lives: 5, par: 150, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('fast', 6, 0.19), w('normal', 5, 0.26)], [w('fly', 3, 0.67), w('armor', 3, 0.6)], [w('armor', 3, 0.6), w('normal', 5, 0.26), w('fly', 3, 0.67)], [w('fly', 5, 0.67), w('fast', 11, 0.19)], [w('normal', 7, 0.26), w('fly', 3, 0.67), w('armor', 3, 0.6)], [w('fast', 10, 0.19), w('normal', 8, 0.26), w('armor', 3, 0.6), w('boss', 1, 3)]] },
+  /* 38 A  */ { map: ['...S....', O, '.#....#.', '##....##', '#......#', '#......#', '##....##', '#..##..#', '##.##.##', '...##...', '.E......'], gold: 95, bonus: 10, lives: 5, par: 117, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('fast', 4, 0.19), w('normal', 3, 0.26)], [w('fly', 3, 0.67), w('armor', 3, 0.6)], [w('armor', 3, 0.6), w('normal', 3, 0.26), w('fly', 3, 0.67)], [w('fly', 3, 0.67), w('fast', 7, 0.19)], [w('normal', 5, 0.26), w('fly', 3, 0.67), w('armor', 3, 0.6)], [w('fast', 7, 0.19), w('normal', 5, 0.26), w('armor', 3, 0.6), w('boss', 1, 3)]] },
   /* 39 R  */ { map: ['.......S', O, '.......#', O, O, '......#.', '...#..##', '#####...', '.......#', O, '.....E..'], gold: 95, bonus: 10, lives: 5, par: 135, tools: ['cannon', 'frost'],
-    waves: [[w('fast', 24, 0.15), w('normal', 20, 0.22), w('armor', 8, 0.5)], [w('normal', 24, 0.22), w('fast', 30, 0.15), w('armor', 10, 0.5)], [w('armor', 34, 0.5)], [w('armor', 41, 0.5)], [w('normal', 89, 0.22)], [w('fast', 81, 0.15), w('normal', 67, 0.22)]] },
-  /* 40 A  */ { map: ['.....S..', O, '#.#..#.#', '...##...', '.#....#.', '.#....#.', '###..###', '##....##', '#.#..#.#', '#......#', '....E...'], gold: 110, bonus: 10, lives: 5, par: 272, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('fast', 27, 0.15), w('normal', 21, 0.22)], [w('fast', 67, 0.15)], [w('armor', 13, 0.49), w('normal', 32, 0.22)], [w('armor', 15, 0.49), w('normal', 37, 0.22)], [w('fly', 15, 0.55), w('normal', 28, 0.22), w('armor', 12, 0.49)], [w('armor', 19, 0.49), w('fly', 25, 0.55), w('boss', 2, 3)]] },
+    waves: [[w('fast', 19, 0.15), w('normal', 16, 0.22), w('armor', 6, 0.5)], [w('normal', 19, 0.22), w('fast', 24, 0.15), w('armor', 8, 0.5)], [w('armor', 28, 0.5)], [w('armor', 33, 0.5)], [w('normal', 72, 0.22)], [w('fast', 66, 0.15), w('normal', 54, 0.22)]] },
+  /* 40 A  */ { map: ['.....S..', O, '#.#..#.#', '...##...', '.#....#.', '.#....#.', '###..###', '##....##', '#.#..#.#', '#......#', '....E...'], gold: 110, bonus: 10, lives: 5, par: 222, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('fast', 14, 0.15), w('normal', 11, 0.22)], [w('fast', 34, 0.15)], [w('armor', 7, 0.49), w('normal', 16, 0.22)], [w('armor', 8, 0.49), w('normal', 19, 0.22), w('shield', 5, 0.35)], [w('fly', 8, 0.55), w('normal', 14, 0.22), w('armor', 6, 0.49), w('shield', 6, 0.35)], [w('armor', 10, 0.49), w('fly', 13, 0.55), w('boss', 2, 3)]] },
   // 41–60: A = all towers (hard → very hard) · R = restricted towers · enemy HP is fixed; harder = more enemies
-  /* 41 A  */ { map: ['.......S', O, '###..###', '##....##', '#.#..#.#', '###..###', '..#..#..', '..#..#..', '.##..##.', O, '.E......'], gold: 120, bonus: 10, lives: 5, par: 162, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('armor', 13, 0.64)], [w('fast', 51, 0.2)], [w('normal', 25, 0.28), w('armor', 10, 0.64)], [w('normal', 29, 0.28), w('armor', 11, 0.64)], [w('fly', 17, 0.72), w('fast', 41, 0.2)], [w('fast', 31, 0.2), w('normal', 25, 0.28), w('armor', 10, 0.64)]] },
+  /* 41 A  */ { map: ['.......S', O, '###..###', '##....##', '#.#..#.#', '###..###', '..#..#..', '..#..#..', '.##..##.', O, '.E......'], gold: 120, bonus: 10, lives: 5, par: 160, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('armor', 9, 0.64)], [w('fast', 34, 0.2)], [w('normal', 17, 0.28), w('armor', 7, 0.64)], [w('normal', 20, 0.28), w('armor', 7, 0.64), w('shield', 5, 0.35)], [w('fly', 11, 0.72), w('fast', 28, 0.2), w('shield', 8, 0.35)], [w('fast', 21, 0.2), w('normal', 17, 0.28), w('armor', 7, 0.64)]] },
   /* 42 A  */ { map: ['..S.....', O, O, '...#....', '..##...#', '.####...', '..##.#..', '..#.....', O, O, '......E.'], gold: 97, bonus: 10, lives: 5, par: 147, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 12, 0.28)], [w('armor', 3, 0.63), w('fly', 3, 0.71), w('fast', 7, 0.2)], [w('armor', 8, 0.63)], [w('fly', 11, 0.71)], [w('normal', 8, 0.28), w('armor', 3, 0.63), w('fast', 10, 0.2)], [w('fast', 24, 0.2), w('boss', 1, 3)]] },
-  /* 43 R  */ { map: ['......S.', O, '..####..', O, '#......#', '##....##', O, '.#....#.', '##....##', '.#....#.', '....E...'], gold: 95, bonus: 10, lives: 5, par: 115, tools: ['gun', 'cannon'],
-    waves: [[w('fast', 14, 0.2), w('armor', 4, 0.62), w('normal', 11, 0.27)], [w('normal', 21, 0.27), w('armor', 8, 0.62)], [w('normal', 17, 0.27), w('armor', 7, 0.62), w('fast', 21, 0.2)], [w('normal', 59, 0.27)], [w('fast', 29, 0.2), w('normal', 23, 0.27), w('armor', 9, 0.62)], [w('fast', 32, 0.2), w('armor', 11, 0.62), w('normal', 26, 0.27)]] },
-  /* 44 A  */ { map: ['.....S..', O, '#..####.', '#....###', '#....#..', '#.#.....', '..##....', '..#.....', '..#.####', O, '.......E'], gold: 98, bonus: 10, lives: 5, par: 185, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('fast', 14, 0.2), w('normal', 11, 0.27), w('armor', 5, 0.62)], [w('normal', 43, 0.27)], [w('normal', 26, 0.27), w('fast', 33, 0.2)], [w('normal', 31, 0.27), w('fly', 15, 0.7)], [w('armor', 9, 0.62), w('fast', 29, 0.2), w('fly', 12, 0.7)], [w('normal', 63, 0.27), w('boss', 2, 3)]] },
-  /* 45 A  */ { map: ['....S...', O, '###..###', '#.#..#.#', '#......#', O, O, '.##..##.', '..#..#..', O, '.....E..'], gold: 65, bonus: 10, lives: 5, par: 129, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('fast', 17, 0.19)], [w('normal', 6, 0.27), w('armor', 3, 0.62), w('fast', 7, 0.19)], [w('fast', 13, 0.19), w('normal', 10, 0.27)], [w('fly', 12, 0.69)], [w('armor', 4, 0.62), w('fly', 4, 0.69), w('normal', 9, 0.27)], [w('normal', 15, 0.27), w('fast', 19, 0.19)]] },
+  /* 43 R  */ { map: ['......S.', O, '..####..', O, '#......#', '##....##', O, '.#....#.', '##....##', '.#....#.', '....E...'], gold: 95, bonus: 10, lives: 5, par: 105, tools: ['gun', 'cannon'],
+    waves: [[w('fast', 12, 0.2), w('armor', 3, 0.62), w('normal', 9, 0.27)], [w('normal', 18, 0.27), w('armor', 7, 0.62)], [w('normal', 14, 0.27), w('armor', 6, 0.62), w('fast', 18, 0.2)], [w('normal', 49, 0.27)], [w('fast', 24, 0.2), w('normal', 19, 0.27), w('armor', 8, 0.62)], [w('fast', 27, 0.2), w('armor', 9, 0.62), w('normal', 22, 0.27)]] },
+  /* 44 A  */ { map: ['.....S..', O, '#..####.', '#....###', '#....#..', '#.#.....', '..##....', '..#.....', '..#.####', O, '.......E'], gold: 98, bonus: 10, lives: 5, par: 180, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('fast', 14, 0.2), w('normal', 11, 0.27), w('armor', 5, 0.62)], [w('normal', 43, 0.27)], [w('normal', 26, 0.27), w('fast', 33, 0.2)], [w('normal', 31, 0.27), w('fly', 15, 0.7)], [w('armor', 9, 0.62), w('fast', 29, 0.2), w('fly', 12, 0.7)], [w('normal', 63, 0.27), w('boss', 1, 3)]] },
+  /* 45 A  */ { map: ['....S...', O, '###..###', '#.#..#.#', '#......#', O, O, '.##..##.', '..#..#..', O, '.....E..'], gold: 85, bonus: 10, lives: 5, par: 120, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('fast', 12, 0.19)], [w('normal', 4, 0.27), w('armor', 3, 0.62), w('fast', 5, 0.19)], [w('fast', 9, 0.19), w('normal', 7, 0.27)], [w('fly', 8, 0.69), w('shield', 3, 0.35)], [w('armor', 3, 0.62), w('fly', 3, 0.69), w('normal', 6, 0.27), w('shield', 3, 0.35)], [w('normal', 11, 0.27), w('fast', 13, 0.19)]] },
   /* 46 A  */ { map: ['...S....', O, '#...####', '..#..###', '.......#', O, '...####.', O, O, O, '.E......'], gold: 112, bonus: 10, lives: 5, par: 227, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 23, 0.27)], [w('fly', 5, 0.68), w('fast', 12, 0.19), w('armor', 4, 0.61)], [w('fast', 40, 0.19)], [w('fly', 10, 0.68), w('armor', 8, 0.61)], [w('fly', 8, 0.68), w('fast', 20, 0.19), w('normal', 16, 0.27)], [w('armor', 7, 0.61), w('fast', 22, 0.19), w('fly', 9, 0.68), w('boss', 3, 3)]] },
   /* 47 R  */ { map: ['.S......', O, O, '.#....#.', '.#....#.', '.#....#.', '.#.##.#.', '.#.##.#.', '#..##..#', '...##...', 'E.......'], gold: 90, bonus: 10, lives: 5, par: 127, tools: ['wall', 'gun', 'frost'],
     waves: [[w('normal', 26, 0.35)], [w('fast', 29, 0.28)], [w('normal', 34, 0.28), w('armor', 5, 0.8)], [w('fast', 39, 0.22)], [w('normal', 39, 0.25), w('fast', 26, 0.22)], [w('fast', 52, 0.2), w('armor', 8, 0.7), w('boss', 2, 3)]] },
   /* 48 A  */ { map: ['.S......', O, '..#..#..', '..#.....', '#.......', '#####...', '#.......', '####....', '.....#..', '.....#..', 'E.......'], gold: 100, bonus: 10, lives: 5, par: 160, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('fast', 13, 0.19), w('normal', 11, 0.26)], [w('fast', 11, 0.19), w('normal', 9, 0.26), w('fly', 4, 0.67)], [w('fly', 8, 0.67), w('armor', 6, 0.59)], [w('fast', 36, 0.19)], [w('fast', 36, 0.19)], [w('fast', 31, 0.19), w('armor', 10, 0.59), w('boss', 1, 3)]] },
-  /* 49 A  */ { map: ['....S...', O, '##....##', O, '...##...', '#......#', O, '.#....#.', '###..###', O, '.......E'], gold: 102, bonus: 10, lives: 5, par: 160, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('normal', 12, 0.26), w('fast', 15, 0.19)], [w('armor', 6, 0.59), w('fast', 19, 0.19)], [w('fly', 9, 0.67), w('armor', 8, 0.59)], [w('normal', 40, 0.26)], [w('normal', 17, 0.26), w('armor', 7, 0.59), w('fast', 21, 0.19)], [w('fly', 29, 0.67)]] },
+  /* 49 A  */ { map: ['....S...', O, '##....##', O, '...##...', '#......#', O, '.#....#.', '###..###', O, '.......E'], gold: 102, bonus: 10, lives: 5, par: 180, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('normal', 10, 0.26), w('fast', 13, 0.19)], [w('armor', 5, 0.59), w('fast', 16, 0.19)], [w('fly', 8, 0.67), w('armor', 7, 0.59)], [w('normal', 34, 0.26), w('shield', 7, 0.35)], [w('normal', 14, 0.26), w('armor', 6, 0.59), w('fast', 18, 0.19), w('shield', 8, 0.35)], [w('fly', 24, 0.67)]] },
   /* 50 A  */ { map: ['..S.....', O, O, '#.#.#...', '###.#..#', '#.#....#', '.....###', O, '.###..#.', '......#.', '.......E'], gold: 76, bonus: 10, lives: 5, par: 99, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 18, 0.26)], [w('fast', 29, 0.18)], [w('normal', 9, 0.26), w('fast', 12, 0.18), w('armor', 4, 0.58)], [w('armor', 4, 0.58), w('normal', 11, 0.26), w('fast', 14, 0.18)], [w('normal', 29, 0.26)], [w('normal', 29, 0.26), w('boss', 2, 3)]] },
   /* 51 R  */ { map: ['S.......', O, '.##..##.', '.##..##.', '.##..##.', '.##..##.', '##....##', '##....##', '#......#', O, '.......E'], gold: 87, bonus: 10, lives: 5, par: 155, tools: ['gun', 'frost', 'aa'],
     waves: [[w('normal', 23, 0.4)], [w('fast', 23, 0.3), w('fly', 5, 1)], [w('normal', 29, 0.3), w('fly', 10, 0.8)], [w('fast', 34, 0.25), w('fly', 10, 0.8)], [w('normal', 34, 0.28), w('fly', 16, 0.7)], [w('fast', 42, 0.22), w('fly', 16, 0.7)]] },
   /* 52 A  */ { map: ['.S......', O, '......##', '....###.', '....###.', '#.......', '#......#', '#..#.###', '##......', O, '....E...'], gold: 105, bonus: 10, lives: 5, par: 160, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 9, 0.25), w('fast', 11, 0.18)], [w('fly', 5, 0.64), w('normal', 11, 0.25)], [w('armor', 5, 0.57), w('fly', 7, 0.64)], [w('fast', 20, 0.18), w('armor', 6, 0.57)], [w('fly', 6, 0.64), w('armor', 5, 0.57), w('fast', 15, 0.18)], [w('normal', 14, 0.25), w('fast', 17, 0.18), w('armor', 5, 0.57), w('boss', 1, 3)]] },
-  /* 53 A  */ { map: ['...S....', O, '#......#', '.#....#.', '.#....#.', '.##..##.', '.#....#.', '##....##', '###..###', '.#....#.', '.....E..'], gold: 133, bonus: 10, lives: 5, par: 185, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('fast', 51, 0.18)], [w('normal', 18, 0.25), w('fly', 8, 0.64), w('fast', 22, 0.18)], [w('armor', 8, 0.57), w('normal', 21, 0.25), w('fly', 11, 0.64)], [w('armor', 29, 0.57)], [w('armor', 11, 0.57), w('fly', 14, 0.64), w('normal', 29, 0.25)], [w('normal', 63, 0.25)]] },
+  /* 53 A  */ { map: ['...S....', O, '#......#', '.#....#.', '.#....#.', '.##..##.', '.#....#.', '##....##', '###..###', '.#....#.', '.....E..'], gold: 133, bonus: 10, lives: 5, par: 227, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('fast', 51, 0.18)], [w('normal', 18, 0.25), w('fly', 8, 0.64), w('fast', 22, 0.18)], [w('armor', 8, 0.57), w('normal', 21, 0.25), w('fly', 11, 0.64)], [w('armor', 29, 0.57), w('shield', 6, 0.35)], [w('armor', 11, 0.57), w('fly', 14, 0.64), w('normal', 29, 0.25), w('shield', 11, 0.35)], [w('normal', 63, 0.25)]] },
   /* 54 A  */ { map: ['.S......', O, O, '..#.###.', '###...#.', '..#...##', '..#....#', '..#....#', '..#....#', O, '...E....'], gold: 107, bonus: 10, lives: 5, par: 180, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('fast', 30, 0.18)], [w('fly', 5, 0.63), w('normal', 10, 0.24), w('armor', 4, 0.56)], [w('armor', 15, 0.56)], [w('normal', 36, 0.24)], [w('fast', 31, 0.18), w('armor', 10, 0.56)], [w('armor', 8, 0.56), w('fly', 9, 0.63), w('fast', 24, 0.18), w('boss', 1, 3)]] },
   /* 55 R  */ { map: ['...S....', O, '...##...', '..####..', '.#.##.#.', '.#.##.#.', '...##...', '...##...', '...##...', '...##...', '..E.....'], gold: 162, bonus: 10, lives: 5, par: 210, tools: ['wall', 'cannon', 'aa'],
     waves: [[w('normal', 23, 0.24), w('armor', 9, 0.55)], [w('normal', 29, 0.24), w('fly', 15, 0.62)], [w('armor', 15, 0.55), w('normal', 36, 0.24)], [w('normal', 69, 0.24)], [w('fly', 16, 0.62), w('normal', 32, 0.24), w('armor', 13, 0.55)], [w('normal', 69, 0.24)]] },
   /* 56 A  */ { map: ['......S.', O, O, O, '.......#', '....#..#', '..#.....', '..##.###', '..####..', '.....#..', '...E....'], gold: 136, bonus: 10, lives: 5, par: 198, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 7, 0.24), w('armor', 3, 0.54), w('fast', 8, 0.17)], [w('fly', 13, 0.61)], [w('normal', 10, 0.24), w('fast', 13, 0.17), w('armor', 4, 0.54)], [w('fast', 15, 0.17), w('fly', 6, 0.61), w('armor', 5, 0.54)], [w('fast', 26, 0.17), w('normal', 21, 0.24)], [w('fast', 19, 0.17), w('fly', 8, 0.61), w('armor', 6, 0.54), w('boss', 2, 3)]] },
-  /* 57 A  */ { map: ['..S.....', O, '..#..#..', '#.#..#.#', '###..###', '##....##', '#......#', '###..###', '#......#', '#......#', '.......E'], gold: 89, bonus: 10, lives: 5, par: 165, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
-    waves: [[w('normal', 8, 0.23), w('fast', 10, 0.17), w('armor', 3, 0.54)], [w('fast', 35, 0.17)], [w('fast', 35, 0.17)], [w('fast', 28, 0.17), w('fly', 11, 0.6)], [w('fly', 26, 0.6)], [w('normal', 29, 0.23), w('fly', 14, 0.6)]] },
+  /* 57 A  */ { map: ['..S.....', O, '..#..#..', '#.#..#.#', '###..###', '##....##', '#......#', '###..###', '#......#', '#......#', '.......E'], gold: 89, bonus: 10, lives: 5, par: 145, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
+    waves: [[w('normal', 5, 0.23), w('fast', 6, 0.17), w('armor', 3, 0.54)], [w('fast', 21, 0.17)], [w('fast', 21, 0.17)], [w('fast', 17, 0.17), w('fly', 7, 0.6), w('shield', 5, 0.35)], [w('fly', 15, 0.6), w('shield', 3, 0.35)], [w('normal', 17, 0.23), w('fly', 8, 0.6)]] },
   /* 58 A  */ { map: ['....S...', O, '#.......', O, '....##..', '#..####.', '#..#...#', '#..####.', '#..##...', O, '....E...'], gold: 90, bonus: 10, lives: 5, par: 164, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'],
     waves: [[w('normal', 5, 0.23), w('fast', 7, 0.17), w('armor', 3, 0.54)], [w('normal', 21, 0.23)], [w('normal', 23, 0.23)], [w('armor', 6, 0.54), w('fly', 7, 0.6)], [w('normal', 11, 0.23), w('armor', 5, 0.54), w('fly', 6, 0.6)], [w('armor', 15, 0.54), w('boss', 1, 3)]] },
   /* 59 R  */ { map: ['..S.....', O, '#..##..#', '#......#', O, '..####..', O, '##....##', '##.##.##', '#..##..#', '...E....'], gold: 90, bonus: 10, lives: 5, par: 150, tools: ['wall', 'gun', 'cannon'],
@@ -417,7 +419,8 @@ const ENDLESS_TUNE = { hpA: 0.08, hpB: 0.003, budget0: 12, budgetW: 2.2, bossEve
 const FIXED_SEED = 20261011;
 const INTEREST = { rate: 0.05, cap: 20 }; // endless only: paid on the gold in hand when a wave is cleared, before the bonus
 function interestOn(gold) { return Math.min(INTEREST.cap, Math.floor(gold * INTEREST.rate)); }
-function genEndless(count, seed) {
+// mix (Random only): before wave 10 a wave is never Flyers-only or Armored-only, so one lucky/unlucky roll can't decide the run
+function genEndless(count, seed, mix) {
   const rnd = seeded(seed === undefined ? FIXED_SEED : seed), waves = [];
   const weight = { normal: 1, fast: 0.8, armor: 2.5, fly: 2 }, gap0 = { normal: 0.4, fast: 0.3, armor: 0.9, fly: 1.0 };
   for (let w = 1; w <= count; w++) {
@@ -426,7 +429,8 @@ function genEndless(count, seed) {
     const pool = ['normal'];
     if (w >= 3) pool.push('fast'); if (w >= 4) pool.push('armor'); if (w >= 6) pool.push('fly');
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-    const k = Math.min(pool.length, w < 3 ? 1 : 1 + Math.floor(rnd() * 3));
+    let k = Math.min(pool.length, w < 3 ? 1 : 1 + Math.floor(rnd() * 3));
+    if (mix && w < 10 && k === 1 && (pool[0] === 'fly' || pool[0] === 'armor')) k = 2;
     const share = (ENDLESS_TUNE.budget0 + ENDLESS_TUNE.budgetW * w) / k, f = Math.max(0.6, 1 - 0.01 * w);
     const wave = pool.slice(0, k).map(t => ({ t, n: Math.max(3, Math.round(share * more / weight[t])),
       gap: Math.max(0.06, Math.round(gap0[t] * f / Math.sqrt(more) * 100) / 100) }));
@@ -439,7 +443,7 @@ function genEndless(count, seed) {
 function makeEndless(random, seed) {
   const s = random ? (seed !== undefined ? seed : (Date.now() ^ 0x5f3759df) >>> 0) : FIXED_SEED;
   const lv = parseLevel({ map: ['...S....','........','........','.#....#.','........','...##...','........','.#....#.','........','........','....E...'],
-    gold: 120, bonus: 10, lives: 10, par: 0, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'], waves: genEndless(200, s) }, -1);
+    gold: 120, bonus: 10, lives: 10, par: 0, tools: ['wall', 'gun', 'cannon', 'frost', 'aa'], waves: genEndless(200, s, !!random) }, -1);
   lv.id = random ? 'R' : 'E'; lv.endless = true; lv.random = !!random; lv.seed = s; return lv;
 }
 
@@ -586,7 +590,7 @@ function step(g) {
         if (q <= S2) near.push([q, e]);
       }
       near.sort((a, b) => a[0] - b[0]); // stable sort keeps ties in spawn order, so results stay repeatable
-      for (let k = 0; k < Math.min(near.length, def.maxHit[t.lvl]); k++) hit(near[k][1], dmg);
+      for (let k = 0; k < Math.min(near.length, def.maxHit[t.lvl]); k++) { const e = near[k][1]; hit(e, ENEMIES[e.type].blastRes ? 0 : dmg); }
       if (g.vis) { F.fx.push({ k: 'boom', from: i, x: best.x, y: best.y, r: S, life: 0.3, max: 0.3 }); g.ev.push('boom'); }
     } else {
       hit(best, dmg);
@@ -662,12 +666,13 @@ const TXT = {
     cost: 'ราคา', range: 'ระยะ (ช่อง)', dmg: 'แรงต่อนัด', rate: 'นัดต่อวินาที', splash: 'รัศมีระเบิด (ช่อง)', maxHit: 'ระเบิดโดนสูงสุด (ตัว)', leakCost: 'หลุดแล้วเสียชีวิต', slow: 'ทำให้ช้าลง', slowDur: 'นานครั้งละ (วิ)',
     lvH: n => `ระดับ ${n}`, hp: 'เลือด', speed: 'ความเร็ว (ช่อง/วิ)', armor: 'เกราะ', bounty: 'เงินที่ได้',
     endlessNote: 'เลือดของศัตรูแต่ละชนิดคงที่ทุกโหมด · ด่านยากและ Endless คลื่นหลัง ๆ จะมีศัตรูมากขึ้นแทน',
-    names: { wall: 'กำแพง', gun: 'ปืน', cannon: 'ปืนใหญ่', frost: 'น้ำแข็ง', aa: 'ยิงอากาศ', normal: 'ธรรมดา', armor: 'เกราะ', fast: 'วิ่งเร็ว', fly: 'บิน', boss: 'บอส' },
+    names: { wall: 'กำแพง', gun: 'ปืน', cannon: 'ปืนใหญ่', frost: 'น้ำแข็ง', aa: 'ยิงอากาศ', normal: 'ธรรมดา', armor: 'เกราะ', fast: 'วิ่งเร็ว', fly: 'บิน', boss: 'บอส', shield: 'โล่' },
     descT: { wall: 'ไม่ยิง ใช้กั้นทางให้ศัตรูเดินอ้อม', gun: 'ยิงทีละตัว เร็ว', cannon: 'ยิงช้าแต่แรง ระเบิดโดนศัตรูที่อยู่ใกล้กันได้หลายตัว (มีจำนวนสูงสุด)',
       frost: 'ไม่ทำความเสียหาย ทำให้ศัตรูทุกตัวในวงช้าลง', aa: 'ระยะไกล ยิงได้แค่ศัตรูบิน' },
     descE: { normal: 'เดินตามเขาวงกต', armor: 'ทุกนัดที่โดน ความแรงลดลงเท่าค่าเกราะ (เหลืออย่างน้อย 1)',
       fast: 'เลือดน้อย แต่วิ่งเร็วเกือบ 2 เท่า', fly: 'บินตรงจากทางเข้าไปทางออก ไม่สนเขาวงกต',
-      boss: 'ตัวใหญ่ เลือดมาก เดินช้า น้ำแข็งได้ผลแค่ครึ่งเดียว หลุดไป 1 ตัวเสียหลายชีวิต' },
+      boss: 'ตัวใหญ่ เลือดมาก เดินช้า น้ำแข็งได้ผลแค่ครึ่งเดียว หลุดไป 1 ตัวเสียหลายชีวิต',
+      shield: 'ทนระเบิด ปืนใหญ่ทำได้แค่ 1 ต่อนัด ป้อมอื่นยิงได้ปกติ' },
   },
   en: {
     tagline: 'Place towers · Build the maze', home: '‹ Home', backGame: '‹ Back to game', restart: 'Restart',
@@ -690,12 +695,13 @@ const TXT = {
     cost: 'Cost', range: 'Range (cells)', dmg: 'Damage per shot', rate: 'Shots per second', splash: 'Blast radius (cells)', maxHit: 'Max enemies per blast', leakCost: 'Lives lost if it gets through', slow: 'Slows by', slowDur: 'Lasts (s)',
     lvH: n => `Lv ${n}`, hp: 'HP', speed: 'Speed (cells/s)', armor: 'Armor', bounty: 'Gold reward',
     endlessNote: 'Each enemy type always has the same HP · harder stages and later Endless waves bring more enemies instead',
-    names: { wall: 'Wall', gun: 'Gun', cannon: 'Cannon', frost: 'Frost', aa: 'Anti-Air', normal: 'Grunt', armor: 'Armored', fast: 'Runner', fly: 'Flyer', boss: 'Boss' },
+    names: { wall: 'Wall', gun: 'Gun', cannon: 'Cannon', frost: 'Frost', aa: 'Anti-Air', normal: 'Grunt', armor: 'Armored', fast: 'Runner', fly: 'Flyer', boss: 'Boss', shield: 'Shield' },
     descT: { wall: 'Doesn’t shoot. Blocks the way so enemies walk around it.', gun: 'Fast, hits one enemy at a time.', cannon: 'Slow but strong. The blast hits several enemies close together (up to a limit).',
       frost: 'No damage. Slows every enemy in range.', aa: 'Long range. Hits flying enemies only.' },
     descE: { normal: 'Follows the maze.', armor: 'Every hit loses damage equal to its armor (at least 1 gets through).',
       fast: 'Low HP, but runs almost twice as fast.', fly: 'Flies straight from entry to exit and ignores the maze.',
-      boss: 'Huge, lots of HP, slow. Frost works only half as well. Costs several lives if it gets through.' },
+      boss: 'Huge, lots of HP, slow. Frost works only half as well. Costs several lives if it gets through.',
+      shield: 'Blast-proof: a Cannon does only 1 damage per shot. Other towers hit it normally.' },
   },
 };
 
@@ -717,7 +723,7 @@ function loadInto(o) {
   save.seen = o.seen && o.seen.t && o.seen.e ? o.seen : { t: {}, e: {} };
   save.lang = o.lang === 'en' ? 'en' : 'th';
   save.speed = o.speed === 2 ? 2 : 1;
-  save.sound = o.sound !== false;
+  save.sound = o.sound !== false && o.sound !== 0;
   save.v = DATA_V;
   return true;
 }
@@ -851,8 +857,8 @@ function loadRun(random) { // a game rebuilt from the saved run, or null when th
 }
 let resumeRandom = false;
 function pickEndless(random) {
-  const g = loadRun(random);
-  if (!g) { if (save.run[random ? 'R' : 'E']) clearRun(random); return startEndless(random); }
+  const g = loadRun(random), empty = g && g.wave === 0 && !g.locked && !g.towers.some(Boolean); // nothing done yet: no Continue box
+  if (!g || empty) { if (save.run[random ? 'R' : 'E']) clearRun(random); return startEndless(random); }
   resumeRandom = random;
   $('resumeTitle').textContent = random ? 'Random' : 'Classic';
   $('resumeGo').textContent = tr('resume', g.wave + 1);
@@ -879,8 +885,9 @@ function startGame(lv, resumed) {
   renderUI(); draw(0); startIdle();
 }
 
+let toolsTheme = ''; // the theme colour the tool icons were drawn with
 function buildTools() {
-  const box = $('tools'); box.textContent = '';
+  const box = $('tools'); box.textContent = ''; toolsTheme = colors().tower;
   for (const k of G.lv.tools) {
     const b = document.createElement('button'); b.className = 'tool'; b.dataset.k = k;
     b.innerHTML = `<span class="tn"><img class="ti" src="${towerIcon(k)}" alt=""><span class="cost">${TOWERS[k].cost[0]}</span></span><span class="nm">${nm(k)}</span>`;
@@ -892,7 +899,7 @@ function buildTools() {
 // wave chips show each enemy as its in-game shape (rendered once per colour theme)
 const iconCache = {};
 function enemyIcon(t) {
-  const C = colors(), key = [t, C.enemy, C.armor, C.fast, C.fly, C.boss, C.ink].join('|');
+  const C = colors(), key = [t, C.enemy, C.armor, C.fast, C.fly, C.boss, C.shield, C.ink].join('|');
   if (!iconCache[key]) { const c = document.createElement('canvas'); drawIcon(c, t === 'boss' ? 1.2 : 1.6, C2 => drawEnemy(C2, t, 0.5, 0.5), 18); iconCache[key] = c.toDataURL(); }
   return iconCache[key];
 }
@@ -909,6 +916,7 @@ function waveSummary(w) {
 
 function renderUI() {
   const g = G, lv = g.lv;
+  if (colors().tower !== toolsTheme) buildTools(); // light/dark switched since the icons were drawn
   $('sLives').textContent = g.lives;
   $('sGold').textContent = g.gold;
   $('sSpent').textContent = spent(g);
@@ -926,7 +934,7 @@ function renderUI() {
   });
   for (const b of $('tools').children) {
     b.setAttribute('aria-pressed', b.dataset.k === tool ? 'true' : 'false');
-    b.disabled = g.gold < TOWERS[b.dataset.k].cost[0] && g.phase === 'plan';
+    b.disabled = (g.gold < TOWERS[b.dataset.k].cost[0] && g.phase === 'plan') || !!g.locked;
   }
   const t = sel >= 0 ? g.towers[sel] : null;
   if (!t) sel = -1;
@@ -974,7 +982,7 @@ function colors() {
   return { field: v('field'), grid: v('grid'), rock: v('rock'), path: v('path'), tower: v('tower'), cannon: v('cannon'),
     wall: v('wall'), base: v('base'), enemy: v('enemy'), armor: v('armor'), armorEdge: v('armor-edge'), hp: v('hp'),
     danger: v('danger'), entry: v('entry'), exit: v('exit'), ok: v('ok'), ink: v('ink'), line: v('line'), gold: v('gold'),
-    frost: v('frost'), aa: v('aa'), fast: v('fast'), fly: v('fly'), boss: v('boss') };
+    frost: v('frost'), aa: v('aa'), fast: v('fast'), fly: v('fly'), boss: v('boss'), shield: v('shield') };
 }
 function drawRange(C, i, R, strong) {
   ctx.beginPath(); ctx.arc(i % COLS + 0.5, ((i / COLS) | 0) + 0.5, R, 0, Math.PI * 2);
@@ -1042,6 +1050,9 @@ function drawEnemy(C, type, x, y) {
     ctx.fillStyle = C.fly; ctx.beginPath();
     ctx.moveTo(x, y - 0.06); ctx.lineTo(x + 0.3, y - 0.18); ctx.lineTo(x + 0.12, y + 0.1); ctx.lineTo(x, y + 0.04);
     ctx.lineTo(x - 0.12, y + 0.1); ctx.lineTo(x - 0.3, y - 0.18); ctx.closePath(); ctx.fill();
+  } else if (type === 'shield') { // round body inside a thick ring
+    ctx.fillStyle = C.shield; ctx.beginPath(); ctx.arc(x, y, 0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = C.shield; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(x, y, 0.25, 0, Math.PI * 2); ctx.stroke();
   } else if (type === 'boss') { // big hexagon with a light rim
     ctx.fillStyle = C.boss; ctx.beginPath();
     for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + Math.PI / 6; k ? ctx.lineTo(x + Math.cos(a) * 0.36, y + Math.sin(a) * 0.36) : ctx.moveTo(x + Math.cos(a) * 0.36, y + Math.sin(a) * 0.36); }
@@ -1429,7 +1440,7 @@ $('tabT').addEventListener('click', () => { bookTab = 't'; buildBook(); });
 $('tabE').addEventListener('click', () => { bookTab = 'e'; buildBook(); });
 
 window.addEventListener('resize', () => { if (!scr.play.hidden) { layout(); draw(0); } });
-try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (G && !scr.play.hidden) { renderUI(); if (!running) draw(0); } }); } catch (e) {}
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (G && !scr.play.hidden) { buildTools(); renderUI(); if (!running) draw(0); } }); } catch (e) {}
 
 applyLang();
 show('home');
